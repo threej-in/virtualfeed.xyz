@@ -1992,3 +1992,22 @@
 [2025-07-02T10:14:58.122Z] Skipping post: Insufficient AI-related terms in title/description
 [2025-07-02T10:14:58.123Z] Finished scraping r/crazyfuckingvideos. Processed 0 new videos
 [2025-07-02T10:14:58.124Z] Reddit scraping completed. Total new videos processed: 78
+[2025-07-03T08:36:12.548Z] Successfully connected to MySQL database
+[2025-07-03T08:36:12.661Z] Database models synchronized successfully
+[2025-07-03T08:36:12.667Z] Reddit scraping is disabled. Start with --enable-scraping flag to enable
+[2025-07-03T08:36:12.669Z] Server is running on port 5000
+[2025-07-03T08:40:54.311Z] Successfully connected to MySQL database
+[2025-07-03T08:40:54.320Z] Database models synchronized successfully
+[2025-07-03T08:40:54.323Z] Reddit scraping is disabled. Start with --enable-scraping flag to enable
+[2025-07-03T08:45:08.600Z] Successfully connected to MySQL database
+[2025-07-03T08:45:08.610Z] Database models synchronized successfully
+[2025-07-03T08:45:08.613Z] Reddit scraping is disabled. Start with --enable-scraping flag to enable
+[2025-07-03T08:45:08.614Z] Server is running on port 5000
+[2025-07-03T08:53:27.908Z] Successfully connected to MySQL database
+[2025-07-03T08:53:27.917Z] Database models synchronized successfully
+[2025-07-03T08:53:27.920Z] Reddit scraping is disabled. Start with --enable-scraping flag to enable
+[2025-07-03T08:53:27.921Z] Server is running on port 5000
+[2025-07-06T09:34:27.531Z] Successfully connected to MySQL database
+[2025-07-06T09:34:27.584Z] Database models synchronized successfully
+[2025-07-06T09:34:27.589Z] Reddit scraping is disabled. Start with --enable-scraping flag to enable
+[2025-07-06T09:34:27.590Z] Server is running on port 5000

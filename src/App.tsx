@@ -37,9 +37,10 @@ const StyledContainer = styled(Container)(({ theme }) => ({
 
 const Header = styled(Box)(({ theme }) => ({
   display: 'flex',
+  flexDirection: 'column',
   alignItems: 'center',
-  padding: theme.spacing(0.75, 1.5),
-  marginBottom: theme.spacing(2),
+  padding: theme.spacing(0.75, 1),
+  marginBottom: theme.spacing(1),
   background: 'rgba(19, 19, 47, 0.95)',
   backdropFilter: 'blur(12px)',
   boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2)',
@@ -51,10 +52,21 @@ const Header = styled(Box)(({ theme }) => ({
   zIndex: 1100,
   width: '100%',
   left: 0,
+  [theme.breakpoints.up('sm')]: {
+    flexDirection: 'row',
+    padding: theme.spacing(0.75, 1.5),
+    marginBottom: theme.spacing(2),
+  },
   right: 0,
   '&:hover': {
     boxShadow: '0 6px 20px rgba(0, 0, 0, 0.25)',
     borderColor: 'rgba(108, 99, 255, 0.25)',
+  },
+  [theme.breakpoints.down('xs')]: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: theme.spacing(0.5),
+    padding: theme.spacing(0.5, 0.75),
   },
   [theme.breakpoints.down('md')]: {
     flexDirection: 'column',
@@ -80,7 +92,9 @@ const SearchSection = styled(Box)(({ theme }) => ({
   display: 'flex',
   justifyContent: 'center',
   [theme.breakpoints.down('md')]: {
-    marginBottom: theme.spacing(0.5),
+  },
+  [theme.breakpoints.down('sm')]: {
+    position: 'relative',
   },
 }));
 
@@ -88,8 +102,7 @@ const FiltersSection = styled(Box)(({ theme }) => ({
   display: 'flex',
   gap: theme.spacing(0.75),
   [theme.breakpoints.down('sm')]: {
-    justifyContent: 'center',
-    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
     gap: theme.spacing(0.5),
   },
 }));
@@ -112,17 +125,15 @@ function App() {
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showError, setShowError] = useState(false);
-  
-  // Store filter values separately from the page number
   const [filterValues, setFilterValues] = useState({
     limit: 12,
     sortBy: 'createdAt' as 'createdAt' | 'views' | 'likes',
     order: 'desc' as 'asc' | 'desc',
     search: undefined as string | undefined,
-    subreddit: undefined as string | undefined,
     showNsfw: false,
   });
-  
+  const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+
   // Observer for infinite scrolling
   const observer = useRef<IntersectionObserver | null>(null);
 
@@ -184,7 +195,6 @@ function App() {
       sortBy: filterValues.sortBy,
       order: filterValues.order,
       search: filterValues.search,
-      subreddit: filterValues.subreddit,
       showNsfw: filterValues.showNsfw,
       page: 1
     });
@@ -214,7 +224,7 @@ function App() {
     loadVideos(true, 1);
     
   }, [filterValues.limit, filterValues.sortBy, filterValues.order, 
-      filterValues.search, filterValues.subreddit, filterValues.showNsfw]);
+      filterValues.search, filterValues.showNsfw]);
       
   // Keep track of initial render state
   const isInitialRender = useRef(true);
@@ -259,10 +269,6 @@ function App() {
     setFilterValues(prev => ({ ...prev, order: value }));
   };
 
-  const handleSubredditChange = (value: string) => {
-    setFilterValues(prev => ({ ...prev, subreddit: value }));
-  };
-
   const handleNsfwChange = (value: boolean) => {
     setFilterValues(prev => ({ ...prev, showNsfw: value }));
   };
@@ -294,39 +300,83 @@ function App() {
             transition={{ duration: 0.3 }}
             style={{ width: '100%', display: 'flex', flexGrow: 1 }}
           >
-            <LogoSection>
+            <LogoSection sx={{ 
+              display: { xs: isSearchExpanded ? 'none' : 'flex', sm: 'flex' }
+            }}>
               <Typography 
                 variant="h5" 
+                onClick={() => {
+                  // Reset all filters and return to homepage
+                  setFilterValues({
+                    limit: 12,
+                    sortBy: 'createdAt',
+                    order: 'desc',
+                    search: '',
+                    showNsfw: false,
+                  });
+                  // Reset videos array to trigger a fresh load
+                  setVideos([]);
+                  setCurrentPage(1);
+                  setHasMore(true);
+                }}
                 sx={{ 
                   fontWeight: 700, 
                   background: 'linear-gradient(45deg, #6c63ff, #ff6584)',
                   WebkitBackgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
-                  mr: { xs: 0, md: 1 }
+                  mr: { xs: 0, md: 1 },
+                  cursor: 'pointer',
+                  '&:hover': {
+                    opacity: 0.85,
+                    transform: 'scale(1.03)',
+                  },
+                  transition: 'all 0.2s ease-in-out'
                 }}
               >
                 VirtualFeed
               </Typography>
             </LogoSection>
             
-            <SearchSection>
-              <Box sx={{ width: '100%', maxWidth: 500 }}>
-                <SearchBar onSearch={handleSearch} />
-              </Box>
-            </SearchSection>
-            
-            <FiltersSection>
-              <Filters
-                sortBy={filterValues.sortBy || 'createdAt'}
-                order={filterValues.order || 'desc'}
-                subreddit={filterValues.subreddit || ''}
-                showNsfw={filterValues.showNsfw}
-                onSortByChange={handleSortByChange}
-                onOrderChange={handleOrderChange}
-                onSubredditChange={handleSubredditChange}
-                onNsfwChange={handleNsfwChange}
-              />
-            </FiltersSection>
+            <Box sx={{ 
+              display: 'flex', 
+              width: '100%', 
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexDirection: { xs: 'row', sm: 'row' },
+              gap: { xs: 1, sm: 2 }
+            }}>
+              <SearchSection sx={{ 
+                flex: { xs: 1, sm: 1 },
+                position: 'relative',
+                width: { xs: '100%', sm: 'auto' }
+              }}>
+                <Box sx={{ 
+                  width: '100%', 
+                  maxWidth: { xs: '100%', sm: 500 },
+                  position: 'relative'
+                }}>
+                  <SearchBar 
+                    onSearch={handleSearch} 
+                    mobileView={true}
+                    onSearchOpenChange={setIsSearchExpanded}
+                  />
+                </Box>
+              </SearchSection>
+              
+              <FiltersSection sx={{ 
+                flexShrink: 0
+              }}>
+                <Filters
+                  sortBy={filterValues.sortBy || 'createdAt'}
+                  order={filterValues.order || 'desc'}
+                  showNsfw={filterValues.showNsfw}
+                  onSortByChange={handleSortByChange}
+                  onOrderChange={handleOrderChange}
+                  onNsfwChange={handleNsfwChange}
+                  mobileView={true}
+                />
+              </FiltersSection>
+            </Box>
           </motion.div>
         </Header>
 
@@ -349,6 +399,20 @@ function App() {
                 videos={videos}
                 onVideoClick={(video) => setSelectedVideo(video)}
                 lastVideoRef={lastVideoElementRef}
+                onResetFilters={() => {
+                  // Reset all filters and return to homepage
+                  setFilterValues({
+                    limit: 12,
+                    sortBy: 'createdAt',
+                    order: 'desc',
+                    search: '',
+                    showNsfw: false,
+                  });
+                  // Reset videos array to trigger a fresh load
+                  setVideos([]);
+                  setCurrentPage(1);
+                  setHasMore(true);
+                }}
               />
               
               {/* Loading indicator at bottom */}

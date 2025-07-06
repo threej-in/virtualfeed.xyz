@@ -27,7 +27,8 @@ import {
     Favorite as FavoriteIcon,
     ArrowUpward as ArrowUpwardIcon,
     Link as LinkIcon,
-    Loop as LoopIcon
+    Loop as LoopIcon,
+    Reddit as RedditIcon
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSwipeable } from 'react-swipeable';
@@ -49,7 +50,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
     
     const [currentIndex, setCurrentIndex] = useState(initialVideoIndex);
     const [isPlaying, setIsPlaying] = useState(false);
-    const [isMuted, setIsMuted] = useState(false);
+    // Always mute videos - audio playback removed as requested
+    const [isMuted, setIsMuted] = useState(true);
     const [isLooping, setIsLooping] = useState(true);
     const [progress, setProgress] = useState(0);
     const [currentTime, setCurrentTime] = useState(0);
@@ -58,8 +60,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
     const [showDetails, setShowDetails] = useState(false);
     const [videoQuality, setVideoQuality] = useState<string>('auto');
     const [isBuffering, setIsBuffering] = useState(false);
+    const [isInitialLoading, setIsInitialLoading] = useState(true);
     const [networkSpeed, setNetworkSpeed] = useState<number | null>(null);
-    const [showNsfw, setShowNsfw] = useState(false);
     
     const videoRef = useRef<HTMLVideoElement>(null);
     const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -180,6 +182,110 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
     }, [currentIndex, videos, getVideoUrl]);
     
 
+    // Create a fallback thumbnail with the video title
+    const createFallbackThumbnail = useCallback((title: string) => {
+        const shortenedTitle = title.substring(0, 30) + (title.length > 30 ? '...' : '');
+        // Create a data URL for an SVG with the title text
+        const svgContent = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
+                <rect width="100%" height="100%" fill="#121212"/>
+                <text x="50%" y="50%" font-family="Arial, sans-serif" font-size="24" fill="#ffffff" text-anchor="middle" dominant-baseline="middle">${shortenedTitle.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')}</text>
+            </svg>
+        `;
+        return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgContent.trim())}`;
+    }, []);
+    
+    // Try alternative thumbnail formats based on video URL
+    const loadThumbnail = useCallback((video: Video) => {
+        setThumbnailError(false);
+        
+        // Check if the thumbnailUrl is a path to a local thumbnail
+        if (video.thumbnailUrl && video.thumbnailUrl.startsWith('/thumbnails/')) {
+            // For locally generated thumbnails, construct the full URL
+            const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+            const fullThumbnailUrl = `${apiBaseUrl}${video.thumbnailUrl}`;
+            
+            // Preload the image to check if it exists
+            const img = new Image();
+            img.onload = () => {
+                setThumbnailUrl(fullThumbnailUrl);
+            };
+            img.onerror = () => {
+                // Try to extract video ID for alternative thumbnails
+                tryAlternativeThumbnails(video);
+            };
+            img.src = fullThumbnailUrl;
+            return;
+        }
+        
+        // If there's a direct thumbnail URL, try it first
+        if (video.thumbnailUrl) {
+            const img = new Image();
+            img.onload = () => {
+                setThumbnailUrl(video.thumbnailUrl);
+            };
+            img.onerror = () => {
+                // Try to extract video ID for alternative thumbnails
+                tryAlternativeThumbnails(video);
+            };
+            img.src = video.thumbnailUrl;
+        } else {
+            // No thumbnail URL, try alternatives
+            tryAlternativeThumbnails(video);
+        }
+    }, []);
+    
+    // Try alternative thumbnail formats based on video URL
+    const tryAlternativeThumbnails = useCallback((video: Video) => {
+        // Extract the video ID from the URL
+        let videoId = '';
+        if (video.videoUrl.includes('/DASH_')) {
+            const match = video.videoUrl.match(/v\.redd\.it\/([^/]+)\//i);
+            if (match && match[1]) videoId = match[1];
+        } else {
+            const match = video.videoUrl.match(/v\.redd\.it\/([^/?]+)/i);
+            if (match && match[1]) videoId = match[1];
+        }
+        
+        if (videoId) {
+            // Try alternative thumbnail formats
+            const alternativeUrls = [
+                `https://preview.redd.it/${videoId}.jpg`,
+                `https://external-preview.redd.it/${videoId}.jpg`,
+                `https://i.redd.it/${videoId}.png`,
+                `https://preview.redd.it/${videoId}.png`
+            ];
+            
+            // Try each URL in sequence
+            let currentIndex = 0;
+            const tryNextUrl = () => {
+                if (currentIndex >= alternativeUrls.length) {
+                    // If all alternatives fail, create a custom thumbnail
+                    setThumbnailUrl(createFallbackThumbnail(video.title));
+                    setThumbnailError(true);
+                    return;
+                }
+                
+                const img = new Image();
+                img.onload = () => {
+                    setThumbnailUrl(alternativeUrls[currentIndex]);
+                };
+                img.onerror = () => {
+                    // Try the next URL
+                    currentIndex++;
+                    tryNextUrl();
+                };
+                img.src = alternativeUrls[currentIndex];
+            };
+            
+            tryNextUrl();
+        } else {
+            // If we can't extract ID, use a custom placeholder
+            setThumbnailUrl(createFallbackThumbnail(video.title));
+            setThumbnailError(true);
+        }
+    }, [createFallbackThumbnail]);
+    
     useEffect(() => {
         // Reset state when changing videos
         setProgress(0);
@@ -187,6 +293,12 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         setDuration(0);
         setIsPlaying(false);
         setIsBuffering(true);
+        setIsInitialLoading(true); // Set initial loading to true when changing videos
+        
+        // Load thumbnail for the current video
+        if (currentVideo) {
+            loadThumbnail(currentVideo);
+        }
         
         // Record start time for network speed measurement
         loadStartTimeRef.current = performance.now();
@@ -200,11 +312,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                 videoRef.current.onwaiting = () => {
                     console.log('Video is buffering...');
                     setIsBuffering(true);
+                    // Don't reset isInitialLoading here - we want to keep track of initial load vs. subsequent buffering
                 };
                 
                 videoRef.current.oncanplay = () => {
                     console.log('Video can play now');
                     setIsBuffering(false);
+                    setIsInitialLoading(false); // Mark initial loading as complete once video can play
                     measureNetworkSpeed();
                     
                     // Preload next video after current one is ready
@@ -273,11 +387,30 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         const pos = (e.clientX - rect.left) / rect.width;
         
         if (videoRef.current) {
+            // Check if the video data is already loaded for this position
             const newTime = pos * videoRef.current.duration;
-            videoRef.current.currentTime = newTime;
+            const buffered = videoRef.current.buffered;
+            let isBuffered = false;
             
+            // Check if the requested time is already in a buffered range
+            for (let i = 0; i < buffered.length; i++) {
+                if (newTime >= buffered.start(i) && newTime <= buffered.end(i)) {
+                    isBuffered = true;
+                    break;
+                }
+            }
+            
+            // Update UI immediately to feel more responsive
             setProgress(pos * 100);
             setCurrentTime(newTime);
+            
+            // If the segment is already buffered, don't show buffering indicator
+            if (isBuffered) {
+                setIsBuffering(false);
+            }
+            
+            // Set the new time
+            videoRef.current.currentTime = newTime;
         }
     };
 
@@ -285,15 +418,43 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         if (videoRef.current) {
             if (isPlaying) {
                 videoRef.current.pause();
+                setIsPlaying(false);
             } else {
+                // Check if the current position is already buffered
+                const currentTime = videoRef.current.currentTime;
+                const buffered = videoRef.current.buffered;
+                let isBuffered = false;
+                
+                for (let i = 0; i < buffered.length; i++) {
+                    if (currentTime >= buffered.start(i) && currentTime <= buffered.end(i)) {
+                        isBuffered = true;
+                        break;
+                    }
+                }
+                
+                // If already buffered, don't show buffering indicator
+                if (isBuffered) {
+                    setIsBuffering(false);
+                }
+                
                 const playPromise = videoRef.current.play();
                 
                 // Handle play promise
                 if (playPromise !== undefined) {
-                    playPromise.catch(e => console.error('Error playing video:', e));
+                    playPromise
+                        .then(() => {
+                            // Playback started successfully
+                            setIsPlaying(true);
+                            if (isBuffered) {
+                                setIsBuffering(false);
+                            }
+                        })
+                        .catch(e => {
+                            console.error('Error playing video:', e);
+                            setIsPlaying(false);
+                        });
                 }
             }
-            setIsPlaying(!isPlaying);
         }
     };
 
@@ -347,26 +508,110 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
 
     const goToNextVideo = useCallback(() => {
         if (currentIndex < videos.length - 1) {
+            // Reset video timer and state
+            setProgress(0);
+            setCurrentTime(0);
+            setDuration(0);
+            
+            // Navigate to next video
             setCurrentIndex(currentIndex + 1);
         }
     }, [currentIndex, videos.length]);
 
     const goToPrevVideo = useCallback(() => {
         if (currentIndex > 0) {
+            // Reset video timer and state
+            setProgress(0);
+            setCurrentTime(0);
+            setDuration(0);
+            
+            // Navigate to previous video
             setCurrentIndex(currentIndex - 1);
         }
     }, [currentIndex]);
 
+    // Track swipe direction state for visual feedback
+    const [swipeDirection, setSwipeDirection] = useState<string | null>(null);
+    const [swipeProgress, setSwipeProgress] = useState(0);
+    
+    // Track thumbnail state
+    const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+    const [thumbnailError, setThumbnailError] = useState(false);
+    
+    // Loading spinner SVG for buffering indicator
+    const loadingSpinnerSvg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid">
+            <circle cx="50" cy="50" r="32" stroke-width="8" stroke="#64B5F6" stroke-dasharray="50.26548245743669 50.26548245743669" fill="none" stroke-linecap="round">
+                <animateTransform attributeName="transform" type="rotate" dur="1s" repeatCount="indefinite" keyTimes="0;1" values="0 50 50;360 50 50"></animateTransform>
+            </circle>
+        </svg>
+    `;
+    const loadingSpinnerUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(loadingSpinnerSvg.trim())}`;
+    
     const swipeHandlers = useSwipeable({
-        onSwipedLeft: () => goToNextVideo(),
-        onSwipedRight: () => goToPrevVideo(),
+        onSwipedLeft: () => {
+            goToNextVideo();
+            // Reset swipe state
+            setSwipeDirection(null);
+            setSwipeProgress(0);
+        },
+        onSwipedRight: () => {
+            goToPrevVideo();
+            // Reset swipe state
+            setSwipeDirection(null);
+            setSwipeProgress(0);
+        },
+        onSwiping: (event) => {
+            // Update swipe direction and progress for visual feedback
+            if (event.dir === 'Left' || event.dir === 'Right') {
+                setSwipeDirection(event.dir);
+                // Calculate swipe progress as percentage (0-100)
+                // Adjust divisor to control sensitivity (lower = more sensitive)
+                const progress = Math.min(Math.abs(event.deltaX) / 150, 1) * 100;
+                setSwipeProgress(progress);
+            }
+        },
         preventScrollOnSwipe: true,
-        trackMouse: false
+        trackMouse: true, // Enable mouse tracking for desktop swipes
+        delta: 10, // Minimum distance in pixels before a swipe starts (lower = more sensitive)
+        swipeDuration: 500, // Maximum time in ms to detect a swipe
+        touchEventOptions: { passive: false }
     });
 
     const toggleDetails = () => {
         setShowDetails(!showDetails);
     };
+    
+    // Handle keyboard navigation
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (!open) return;
+            
+            switch (e.key) {
+                case 'ArrowRight':
+                case 'Right': // For IE/Edge compatibility
+                    goToNextVideo();
+                    break;
+                case 'ArrowLeft':
+                case 'Left': // For IE/Edge compatibility
+                    goToPrevVideo();
+                    break;
+                // Optional: Add space bar for play/pause
+                case ' ':
+                    togglePlay();
+                    e.preventDefault(); // Prevent page scrolling
+                    break;
+            }
+        };
+        
+        // Add event listener
+        window.addEventListener('keydown', handleKeyDown);
+        
+        // Clean up
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [open, goToNextVideo, goToPrevVideo, togglePlay]);
 
     if (!currentVideo || !open) return null;
 
@@ -432,10 +677,18 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        overflow: 'hidden'
+                        overflow: 'hidden',
+                        // Optimize height for mobile devices
+                        height: { xs: 'calc(100vh - 80px)', md: '100%' },
+                        cursor: swipeDirection ? (swipeDirection === 'Left' ? 'e-resize' : 'w-resize') : 'default'
                     }}
                     onMouseMove={() => setShowControls(true)}
-                    onClick={togglePlay}
+                    onClick={(e) => {
+                        // Only toggle play if we're not in the middle of a swipe
+                        if (!swipeDirection) {
+                            togglePlay();
+                        }
+                    }}
                 >
                     <AnimatePresence mode="wait">
                         <motion.div
@@ -447,6 +700,91 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                             style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center' }}
                         >
                             <Box sx={{ width: '100%', height: '100%', position: 'relative' }}>
+                                {/* Swipe direction indicators */}
+                                {swipeDirection === 'Left' && (
+                                    <Box
+                                        sx={{
+                                            position: 'absolute',
+                                            top: 0,
+                                            right: 0,
+                                            height: '100%',
+                                            width: `${swipeProgress}%`,
+                                            maxWidth: '30%',
+                                            backgroundColor: 'rgba(255,255,255,0.15)',
+                                            zIndex: 2,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center'
+                                        }}
+                                    >
+                                        <ArrowRightIcon sx={{ fontSize: 40, color: 'white', opacity: swipeProgress / 100 }} />
+                                    </Box>
+                                )}
+                                {swipeDirection === 'Right' && (
+                                    <Box
+                                        sx={{
+                                            position: 'absolute',
+                                            top: 0,
+                                            left: 0,
+                                            height: '100%',
+                                            width: `${swipeProgress}%`,
+                                            maxWidth: '30%',
+                                            backgroundColor: 'rgba(255,255,255,0.15)',
+                                            zIndex: 2,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center'
+                                        }}
+                                    >
+                                        <ArrowLeftIcon sx={{ fontSize: 40, color: 'white', opacity: swipeProgress / 100 }} />
+                                    </Box>
+                                )}
+                                {/* Loading animation displayed while video is buffering */}
+                                {isBuffering && (
+                                    <Box
+                                        sx={{
+                                            position: 'absolute',
+                                            top: 0,
+                                            left: 0,
+                                            width: '100%',
+                                            height: '100%',
+                                            zIndex: 1,
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            backgroundColor: 'rgba(0,0,0,0.7)',
+                                        }}
+                                    >
+                                        {/* Animated loading spinner */}
+                                        <img
+                                            src={loadingSpinnerUrl}
+                                            alt="Loading..."
+                                            style={{
+                                                width: '80px',
+                                                height: '80px',
+                                            }}
+                                        />
+                                        
+                                        {/* Show thumbnail in background only during initial loading */}
+                                        {isInitialLoading && thumbnailUrl && (
+                                            <img
+                                                src={thumbnailUrl}
+                                                alt={currentVideo.title || 'Video thumbnail'}
+                                                style={{
+                                                    position: 'absolute',
+                                                    top: 0,
+                                                    left: 0,
+                                                    width: '100%',
+                                                    height: '100%',
+                                                    objectFit: 'contain',
+                                                    opacity: 0.3, // Very dim in background
+                                                    zIndex: -1,
+                                                }}
+                                            />
+                                        )}
+                                    </Box>
+                                )}
                                 <video
                                     ref={videoRef}
                                     style={{
@@ -464,10 +802,16 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                     onTimeUpdate={handleTimeUpdate}
                                     onPlay={() => setIsPlaying(true)}
                                     onPause={() => setIsPlaying(false)}
-                                    onWaiting={() => setIsBuffering(true)}
-                                    onPlaying={() => setIsBuffering(false)}
+                                    onWaiting={() => {
+                                        setIsBuffering(true);
+                                    }}
+                                    onPlaying={() => {
+                                        setIsBuffering(false);
+                                    }}
+                                    onCanPlayThrough={() => {
+                                        setIsBuffering(false);
+                                    }}
                                     onStalled={() => {
-                                        console.warn('Video playback stalled');
                                         // If stalled for too long, try a lower quality
                                         if (videoRef.current && currentVideo.videoUrl.includes('v.redd.it')) {
                                             const videoId = currentVideo.videoUrl.match(/v\.redd\.it\/([^/?]+)/i)?.[1];
@@ -476,7 +820,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                                 const currentQuality = parseInt(getVideoQuality(videoId));
                                                 if (currentQuality > 240) {
                                                     const lowerQuality = Math.max(240, currentQuality - 240);
-                                                    console.log(`Reducing quality to ${lowerQuality}p due to stalling`);
                                                     setVideoQuality(lowerQuality.toString());
                                                     
                                                     // Save current time before changing source
@@ -494,18 +837,15 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                         }
                                     }}
                                     onError={(e) => {
-                                        console.error('Video playback error:', e);
                                         setIsBuffering(false);
                                         // If video fails to load, try with a different URL format
                                         if (videoRef.current && currentVideo.videoUrl.includes('v.redd.it')) {
                                             const videoId = currentVideo.videoUrl.match(/v\.redd\.it\/([^/?]+)/i)?.[1];
                                             if (videoId) {
-                                                console.log('Trying fallback URL for video ID:', videoId);
                                                 // Try a lower quality first
                                                 videoRef.current.src = `https://v.redd.it/${videoId}/DASH_480.mp4`;
                                                 videoRef.current.load();
                                                 videoRef.current.play().catch(err => {
-                                                    console.error('Playback error:', err);
                                                     // If still failing, try an even lower quality
                                                     videoRef.current!.src = `https://v.redd.it/${videoId}/DASH_240.mp4`;
                                                     videoRef.current!.load();
@@ -574,29 +914,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                         <CloseIcon />
                     </IconButton>
                     
-                    {/* Buffering indicator */}
-                    {isBuffering && (
-                        <Box
-                            sx={{
-                                position: 'absolute',
-                                top: '50%',
-                                left: '50%',
-                                transform: 'translate(-50%, -50%)',
-                                backgroundColor: 'rgba(0,0,0,0.5)',
-                                borderRadius: '8px',
-                                padding: '10px 20px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                zIndex: 5
-                            }}
-                        >
-                            <Typography variant="body2" sx={{ color: 'white' }}>
-                                Buffering...
-                            </Typography>
-                        </Box>
-                    )}
-                    
                     {/* Custom video controls */}
                     <Fade in={showControls}>
                         <Box 
@@ -644,63 +961,79 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                 </Box>
                             </Box>
                             
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                    <IconButton 
-                                        onClick={(e) => { e.stopPropagation(); togglePlay(); }}
-                                        sx={{ color: 'white', padding: '8px' }}
-                                    >
-                                        {isPlaying ? <PauseIcon /> : <PlayIcon />}
-                                    </IconButton>
-                                    
-                                    <IconButton 
-                                        onClick={(e) => { e.stopPropagation(); toggleMute(); }}
-                                        sx={{ color: 'white', padding: '8px' }}
-                                    >
-                                        {isMuted ? <MuteIcon /> : <VolumeIcon />}
-                                    </IconButton>
-                                    
-                                    <IconButton 
-                                        onClick={(e) => { e.stopPropagation(); toggleLoop(); }}
-                                        sx={{ 
-                                            color: isLooping ? '#f50057' : 'white',
-                                            padding: '8px'
-                                        }}
-                                        title="Toggle loop"
-                                    >
-                                        <LoopIcon />
-                                    </IconButton>
-                                    
-                                    {/* NSFW toggle button - only show if video is marked as NSFW */}
-                                    {currentVideo.nsfw && (
+                            <Box sx={{ 
+                                display: 'flex', 
+                                justifyContent: 'space-between', 
+                                alignItems: 'center',
+                                flexWrap: { xs: 'wrap', sm: 'nowrap' }
+                            }}>
+                                <Box sx={{ 
+                                    display: 'flex', 
+                                    alignItems: 'center',
+                                    flexWrap: { xs: 'wrap', sm: 'nowrap' },
+                                    width: { xs: '100%', sm: 'auto' },
+                                    justifyContent: { xs: 'space-between', sm: 'flex-start' },
+                                    mb: { xs: 1, sm: 0 }
+                                }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
                                         <IconButton 
-                                            onClick={(e) => { 
-                                                e.stopPropagation(); 
-                                                setShowNsfw(!showNsfw); 
-                                            }}
+                                            onClick={(e) => { e.stopPropagation(); togglePlay(); }}
                                             sx={{ 
-                                                color: showNsfw ? '#f50057' : 'white', 
-                                                padding: '8px',
-                                                backgroundColor: showNsfw ? 'rgba(245, 0, 87, 0.1)' : 'transparent'
+                                                color: 'white', 
+                                                padding: { xs: '4px', sm: '8px' },
+                                                '& .MuiSvgIcon-root': {
+                                                    fontSize: { xs: '1.5rem', sm: '1.75rem' }
+                                                }
                                             }}
-                                            title={showNsfw ? "Blur NSFW content" : "Show NSFW content"}
                                         >
-                                            {showNsfw ? <VisibilityIcon /> : <VisibilityOffIcon />}
+                                            {isPlaying ? <PauseIcon /> : <PlayIcon />}
                                         </IconButton>
-                                    )}
+                                        
+                                        {/* Audio control button removed as requested */}
+                                        
+                                        <IconButton 
+                                            onClick={(e) => { e.stopPropagation(); setIsLooping(!isLooping); }}
+                                            sx={{ 
+                                                color: isLooping ? '#f50057' : 'white',
+                                                padding: { xs: '4px', sm: '8px' },
+                                                '& .MuiSvgIcon-root': {
+                                                    fontSize: { xs: '1.25rem', sm: '1.5rem' }
+                                                }
+                                            }}
+                                            title={isLooping ? "Disable loop" : "Enable loop"}
+                                        >
+                                            <LoopIcon />
+                                        </IconButton>
+                                    </Box>
                                     
-                                    <Typography variant="body2" sx={{ color: 'white', ml: 1 }}>
-                                        {formatTime(currentTime)} / {formatTime(duration)}
-                                    </Typography>
+                                    <Box sx={{ display: 'flex', alignItems: 'center' }}>                                        
+                                        <IconButton 
+                                            onClick={(e) => { e.stopPropagation(); handleFullscreen(); }}
+                                            sx={{ 
+                                                color: 'white', 
+                                                padding: { xs: '4px', sm: '8px' },
+                                                '& .MuiSvgIcon-root': {
+                                                    fontSize: { xs: '1.25rem', sm: '1.5rem' }
+                                                }
+                                            }}
+                                        >
+                                            <FullscreenIcon />
+                                        </IconButton>
+                                    </Box>
                                 </Box>
                                 
-                                <IconButton 
-                                    onClick={(e) => { e.stopPropagation(); handleFullscreen(); }}
-                                    sx={{ color: 'white', padding: '8px' }}
+                                <Typography 
+                                    variant="body2" 
+                                    sx={{ 
+                                        color: 'white', 
+                                        ml: { xs: 0, sm: 1 },
+                                        width: { xs: '100%', sm: 'auto' },
+                                        textAlign: { xs: 'center', sm: 'right' },
+                                        fontSize: { xs: '0.75rem', sm: '0.875rem' }
+                                    }}
                                 >
-                                    <FullscreenIcon />
-                                </IconButton>
-                                
+                                    {formatTime(currentTime)} / {formatTime(duration)}
+                                </Typography>
                             </Box>
                         </Box>
                     </Fade>
@@ -712,11 +1045,14 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                         flex: { xs: 'auto', md: '0.35' },
                         backgroundColor: '#121212',
                         borderLeft: { xs: 'none', md: '1px solid rgba(255,255,255,0.1)' },
+                        borderTop: { xs: '1px solid rgba(255,255,255,0.1)', md: 'none' },
                         overflow: 'auto',
                         display: 'flex',
                         flexDirection: 'column',
-                        maxHeight: { xs: showDetails ? '50%' : '80px', md: '100%' },
+                        maxHeight: { xs: showDetails ? '60%' : '80px', md: '100%' },
                         transition: 'max-height 0.3s ease',
+                        // Add shadow to make the panel more distinct on mobile
+                        boxShadow: { xs: '0px -2px 10px rgba(0,0,0,0.2)', md: 'none' },
                         position: { xs: 'absolute', md: 'relative' },
                         bottom: 0,
                         left: 0,
@@ -729,6 +1065,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                         sx={{ 
                             display: { xs: 'flex', md: 'none' },
                             justifyContent: 'center',
+                            alignItems: 'center',
                             padding: '8px 0',
                             cursor: 'pointer',
                             borderBottom: '1px solid rgba(255,255,255,0.1)'
@@ -743,9 +1080,26 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                 borderRadius: '2px'
                             }}
                         />
+                        <Typography 
+                            variant="caption" 
+                            sx={{ 
+                                color: 'rgba(255,255,255,0.6)', 
+                                ml: 1,
+                                fontSize: '0.7rem',
+                                display: { xs: showDetails ? 'none' : 'block', md: 'none' }
+                            }}
+                        >
+                            {showDetails ? 'Hide details' : 'Show details'}
+                        </Typography>
                     </Box>
                     
-                    <Box sx={{ p: 3, overflow: 'auto' }}>
+                    <Box sx={{ 
+                        p: { xs: 2, sm: 3 }, 
+                        overflow: 'auto',
+                        '& .MuiTypography-root': {
+                            fontSize: { xs: '0.9rem', sm: '1rem' }
+                        }
+                    }}>
                         <Typography 
                             variant="h6" 
                             gutterBottom 
@@ -754,13 +1108,20 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                 lineHeight: 1.3,
                                 mb: 2,
                                 color: '#fff',
-                                textShadow: '0 1px 2px rgba(0,0,0,0.3)'
+                                textShadow: '0 1px 2px rgba(0,0,0,0.3)',
+                                fontSize: { xs: '1.1rem', sm: '1.25rem' }
                             }}
                         >
                             {currentVideo.title}
                         </Typography>
                         
-                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                        <Box sx={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            mb: 3,
+                            flexWrap: { xs: 'wrap', sm: 'nowrap' },
+                            gap: { xs: 1, sm: 0 }
+                        }}>
                             <Chip 
                                 label={`r/${currentVideo.subreddit}`} 
                                 color="primary" 
@@ -792,7 +1153,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                             <Box 
                                 sx={{ 
                                     mb: 3, 
-                                    p: 2, 
+                                    p: { xs: 1.5, sm: 2 }, 
                                     borderRadius: '8px',
                                     backgroundColor: 'rgba(255,255,255,0.05)',
                                     border: '1px solid rgba(255,255,255,0.1)',
@@ -826,13 +1187,16 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                         
                         <Box 
                             sx={{ 
-                                display: 'flex', 
+                                display: 'flex',
+                                alignItems: 'center',
                                 justifyContent: 'space-between', 
                                 mb: 3,
-                                p: 1.5,
+                                p: { xs: 1, sm: 1.5 },
                                 backgroundColor: 'rgba(0,0,0,0.2)',
                                 borderRadius: '8px',
-                                border: '1px solid rgba(255,255,255,0.05)'
+                                border: '1px solid rgba(255,255,255,0.05)',
+                                flexWrap: { xs: 'wrap', sm: 'nowrap' },
+                                gap: { xs: 1, sm: 0 }
                             }}
                         >
                             <Chip 
@@ -875,27 +1239,35 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                     '& .MuiChip-icon': { color: '#81C784' }
                                 }}
                             />
-                            <Chip 
-                                icon={<LinkIcon fontSize="small" sx={{ color: '#FF8A65' }} />} 
-                                label="Reddit" 
-                                variant="filled" 
-                                size="small" 
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    window.open(currentVideo.metadata.redditUrl, '_blank');
+                            <Button
+                                variant="outlined"
+                                startIcon={<RedditIcon />}
+                                onClick={() => {
+                                    try {
+                                        // Handle both string and object metadata formats
+                                        const metadata = typeof currentVideo.metadata === 'string' 
+                                            ? JSON.parse(currentVideo.metadata) 
+                                            : currentVideo.metadata;
+                                            
+                                        // Open Reddit URL if available
+                                        if (metadata?.redditUrl) {
+                                            window.open(metadata.redditUrl, '_blank');
+                                        }
+                                    } catch (error) {
+                                        console.error('Error opening Reddit URL:', error);
+                                    }
                                 }}
-                                clickable
                                 sx={{ 
-                                    backgroundColor: 'rgba(255, 87, 34, 0.15)',
-                                    color: '#FFAB91',
-                                    fontWeight: 500,
-                                    cursor: 'pointer',
-                                    '&:hover': {
-                                        backgroundColor: 'rgba(255, 87, 34, 0.25)',
-                                    },
-                                    '& .MuiChip-icon': { color: '#FF8A65' }
+                                    borderColor: 'rgba(255,255,255,0.3)',
+                                    color: '#fff',
+                                    flex: { xs: '1 1 auto', sm: 'initial' },
+                                    fontSize: { xs: '0.8rem', sm: '0.875rem' },
+                                    py: { xs: 0.75, sm: 1 }
                                 }}
-                            />
+                                size="small"
+                            >
+                                {window.innerWidth < 500 ? 'Reddit' : 'View on Reddit'}
+                            </Button>
                         </Box>
                         
                         <Box 
@@ -958,25 +1330,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                     />
                                 ))}
                             </Stack>
-                        </Box>
-                        
-                        <Box sx={{ display: 'flex', gap: 1 }}>
-                            <Button
-                                variant="contained"
-                                color="primary"
-                                startIcon={<ThumbUpIcon />}
-                                onClick={handleLike}
-                                fullWidth
-                            >
-                                Like
-                            </Button>
-                            <Button
-                                variant="outlined"
-                                startIcon={<ShareIcon />}
-                                fullWidth
-                            >
-                                Share
-                            </Button>
                         </Box>
                     </Box>
                 </Box>

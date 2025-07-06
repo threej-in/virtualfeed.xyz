@@ -1,4 +1,4 @@
-# VirtualFeed - AI Generated Video Platform
+# VirtualFeed - TikTok for AI Generated Videos
 
 A modern web application that aggregates and displays AI-generated videos from various subreddits. Built with React, TypeScript, and Node.js.
 

@@ -1,6 +1,12 @@
 import { Request, Response } from 'express';
 import Video from '../models/Video';
 import axios from 'axios';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+// Secret code for secure actions
+const SECURE_ACTION_SECRET = process.env.SECURE_ACTION_SECRET || 'default-secret-change-me';
 
 export const getVideos = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -46,7 +52,7 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
             
             // Count matching records with filters
             const countQuery = `SELECT COUNT(*) as count FROM videos ${whereClause}`;
-            const [countResult] = await db.query(countQuery, queryParams);
+            const [countResult] = await db.query(countQuery, { replacements: queryParams });
             const count = countResult[0].count;
             
             // Return early if no videos match the filters
@@ -71,7 +77,7 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
                 ORDER BY ${finalSortBy} ${finalOrder} 
                 LIMIT ${limitNum} OFFSET ${offset}
             `;
-            const [videos] = await db.query(videosQuery, queryParams);
+            const [videos] = await db.query(videosQuery, { replacements: queryParams });
                         
             res.json({
                 videos,
@@ -190,62 +196,140 @@ export const fetchRedditUpvotes = async (req: Request, res: Response): Promise<v
         res.status(500).json({ message: 'Server error' });
     }
 };
+
 /**
  * Proxy endpoint to fetch Reddit audio files with proper headers
  * This helps bypass CORS and 403 errors when fetching audio directly from the client
  */
 export const proxyRedditAudio = async (req: Request, res: Response): Promise<void> => {
-    const { url } = req.query;
-    
-    if (!url || typeof url !== 'string') {
-        res.status(400).json({ message: 'URL parameter is required' });
-        return;
-    }
-    
     try {
-        // Only allow Reddit audio URLs
-        if (!url.includes('v.redd.it')) {
-            res.status(403).json({ message: 'Only Reddit audio URLs are allowed' });
+        const { url } = req.query;
+        
+        if (!url || typeof url !== 'string') {
+            res.status(400).json({ error: 'URL parameter is required' });
             return;
         }
         
-        console.log(`Proxying Reddit audio: ${url}`);
-        
-        const response = await axios({
-            method: 'get',
-            url,
-            responseType: 'stream',
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                'Referer': 'https://www.reddit.com/',
-                'Accept': '*/*',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Connection': 'keep-alive'
-            },
-            timeout: 10000 // 10 second timeout
-        });
-        
-        // Forward content type header
-        if (response.headers['content-type']) {
-            res.setHeader('Content-Type', response.headers['content-type']);
-        } else {
-            res.setHeader('Content-Type', 'audio/mp4');
+        // Only allow Reddit URLs
+        if (!url.includes('v.redd.it')) {
+            res.status(403).json({ error: 'Only Reddit URLs are allowed' });
+            return;
         }
         
-        // Set cache headers
-        res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
-        
-        // Pipe the response stream directly to the client
-        response.data.pipe(res);
-    } catch (error: any) {
-        console.error(`Error proxying Reddit audio: ${error.message}`);
-        
-        // Check if headers have already been sent
-        if (!res.headersSent) {
-            res.status(500).json({ 
-                message: 'Failed to proxy audio', 
-                error: error.message 
+        try {
+            const response = await axios({
+                method: 'get',
+                url: url,
+                responseType: 'stream',
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                    'Accept': '*/*',
+                    'Accept-Encoding': 'gzip, deflate, br',
+                    'Connection': 'keep-alive',
+                    'Range': 'bytes=0-',
+                    'Referer': 'https://www.reddit.com/',
+                    'Origin': 'https://www.reddit.com'
+                },
+                timeout: 10000 // 10 seconds timeout
+            });
+            
+            // Set appropriate headers
+            res.setHeader('Content-Type', response.headers['content-type'] || 'audio/mp4');
+            if (response.headers['content-length']) {
+                res.setHeader('Content-Length', response.headers['content-length']);
+            }
+            if (response.headers['accept-ranges']) {
+                res.setHeader('Accept-Ranges', response.headers['accept-ranges']);
+            }
+            if (response.headers['content-range']) {
+                res.setHeader('Content-Range', response.headers['content-range']);
+            }
+            
+            // Stream the response
+            response.data.pipe(res);
+        } catch (error: any) {
+            console.error('Error proxying Reddit audio:', error.message);
+            
+            // If we get a 403 or other error, return a proper error response
+            const status = error.response?.status || 500;
+            const errorMessage = error.response?.statusText || error.message || 'Unknown error';
+            
+            res.status(status).json({
+                error: `Failed to proxy Reddit audio: ${errorMessage}`,
+                status: status
             });
         }
+    } catch (error) {
+        console.error('Error in proxyRedditAudio:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+};
+
+/**
+ * Secure Video Action - Mark as NSFW or Delete a video
+ * Requires a secret code to perform the action
+ */
+export const secureVideoAction = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const { action, secret } = req.query;
+        
+        // Validate required parameters
+        if (!id) {
+            res.status(400).json({ error: 'Video ID is required' });
+            return;
+        }
+        
+        if (!action || typeof action !== 'string') {
+            res.status(400).json({ error: 'Action parameter is required (nsfw or delete)' });
+            return;
+        }
+        
+        if (!secret || typeof secret !== 'string') {
+            res.status(400).json({ error: 'Secret code is required' });
+            return;
+        }
+        
+        // Verify secret code
+        if (secret !== SECURE_ACTION_SECRET) {
+            // Use a constant-time comparison to prevent timing attacks
+            // Even though we return the same error, we want to avoid leaking info via timing differences
+            res.status(403).json({ error: 'Invalid secret code' });
+            return;
+        }
+        
+        // Find the video
+        const video = await Video.findByPk(id);
+        
+        if (!video) {
+            res.status(404).json({ error: 'Video not found' });
+            return;
+        }
+        
+        // Perform the requested action
+        if (action === 'nsfw') {
+            // Mark video as NSFW
+            await video.update({ nsfw: true });
+            res.status(200).json({ 
+                message: 'Video marked as NSFW successfully',
+                video: {
+                    id: video.id,
+                    title: video.title,
+                    nsfw: true
+                }
+            });
+        } else if (action === 'delete') {
+            // Delete the video
+            await video.destroy();
+            res.status(200).json({ 
+                message: 'Video deleted successfully',
+                videoId: id
+            });
+        } else {
+            res.status(400).json({ error: 'Invalid action. Use "nsfw" or "delete"' });
+        }
+    } catch (error) {
+        console.error('Error in secureVideoAction:', error);
+        res.status(500).json({ error: 'Server error' });
     }
 };

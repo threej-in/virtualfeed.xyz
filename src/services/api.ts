@@ -16,7 +16,6 @@ export interface VideoFilters {
     search?: string;
     sortBy?: 'createdAt' | 'views' | 'likes';
     order?: 'asc' | 'desc';
-    subreddit?: string;
     showNsfw?: boolean;
 }
 

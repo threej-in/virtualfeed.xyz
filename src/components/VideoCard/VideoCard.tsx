@@ -18,13 +18,21 @@ const StyledCard = styled(Card)(({ theme }) => ({
     display: 'flex',
     flexDirection: 'column',
     backgroundColor: 'rgba(18, 18, 18, 0.6)',
-    borderRadius: '4px',
+    borderRadius: '8px',
     overflow: 'hidden',
+    transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+    '&:hover': {
+        transform: 'translateY(-4px)',
+        boxShadow: '0 6px 12px rgba(0, 0, 0, 0.3)'
+    },
+    [theme.breakpoints.down('sm')]: {
+        borderRadius: '6px',
+    },
 }));
 
 const PlayOverlay = styled(Box)(({ theme }) => ({
     position: 'absolute',
-    top: '-1rem',
+    top: 0,
     left: 0,
     right: 0,
     bottom: 0,
@@ -32,9 +40,30 @@ const PlayOverlay = styled(Box)(({ theme }) => ({
     alignItems: 'center',
     justifyContent: 'center',
     opacity: 0,
-    transition: 'opacity 0.2s ease',
+    transition: 'opacity 0.3s ease',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
     '&:hover': {
         opacity: 1,
+    },
+    [theme.breakpoints.down('sm')]: {
+        '& .MuiSvgIcon-root': {
+            fontSize: '2.5rem',
+        },
+    },
+}));
+
+const ThumbnailOverlay = styled(Box)(({ theme }) => ({
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: theme.spacing(0.75, 1),
+    background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.4) 60%, rgba(0,0,0,0) 100%)',
+    [theme.breakpoints.down('sm')]: {
+        padding: theme.spacing(0.5, 0.75),
     },
 }));
 
@@ -222,86 +251,188 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick }) => {
     };
 
     return (
-        <StyledCard>
+        <StyledCard title={video.id + ""}>
             <CardActionArea onClick={onClick} sx={{ position: 'relative' }}>
                 {imageLoading && (
                     <Skeleton 
                         variant="rectangular" 
                         height={180}
                         animation="wave"
-                        sx={{ bgcolor: 'grey.800' }}
+                        sx={{ 
+                            bgcolor: 'grey.800',
+                            '@media (max-width: 600px)': {
+                                height: '160px'
+                            }
+                        }}
                     />
                 )}
                 {imageLoading && (
                     <Box 
                         sx={{ 
-                            height: 180, 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            justifyContent: 'center',
-                            backgroundColor: 'rgba(18, 18, 18, 0.8)'
+                            position: 'relative',
+                            paddingTop: '56.25%', // 16:9 aspect ratio
+                            overflow: 'hidden',
+                            backgroundColor: 'rgba(18, 18, 18, 0.8)',
                         }}
                     >
-                        <MovieIcon sx={{ fontSize: 40, opacity: 0.7 }} />
+                        <Box sx={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: '100%',
+                            height: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                        }}>
+                            <MovieIcon sx={{ 
+                                fontSize: { xs: 32, sm: 40 }, 
+                                opacity: 0.7 
+                            }} />
+                        </Box>
                     </Box>
                 )}
-                <CardMedia
-                    component="img"
-                    height="260"
-                    image={thumbnailUrl}
-                    alt={video.title}
-                    onLoad={handleImageLoad}
-                    onError={handleImageError}
-                    ref={imageRef}
-                    loading="lazy"
-                    sx={{ 
-                        display: imageLoading ? 'none' : 'block',
-                        objectFit: 'cover',
-                        filter: video.nsfw ? 'blur(10px)' : 'none',
-                        transition: 'filter 0.3s ease'
-                    }}
-                />
-                <PlayOverlay>
-                    <PlayArrowIcon sx={{ fontSize: 40, color: 'white', opacity: 0.9 }} />
-                </PlayOverlay>
-                <CardContent sx={{ pt: 1, pb: 0.5, px: 1 }}>
-                    <Typography 
-                        variant="body1" 
-                        component="div" 
-                        noWrap
-                        sx={{ 
-                            fontSize: '0.85rem', 
-                            fontWeight: 500,
-                            lineHeight: 1.2
+                <Box sx={{
+                    position: 'relative',
+                    paddingTop: '56.25%', // 16:9 aspect ratio
+                    overflow: 'hidden',
+                    '@media (min-width: 960px)': {
+                        paddingTop: '62%' // Slightly taller on desktop for better visibility
+                    },
+                }}>
+                    <CardMedia
+                        component="img"
+                        image={thumbnailUrl}
+                        alt={video.title}
+                        ref={imageRef}
+                        sx={{
+                            display: imageLoading ? 'none' : 'block',
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            objectPosition: 'center',
+                            filter: video.nsfw ? 'blur(10px)' : 'none',
+                            transition: 'filter 0.3s ease'
                         }}
-                    >
-                        {video.title}
-                    </Typography>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.5 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', mr: 1 }}>
-                            <VisibilityIcon sx={{ mr: 0.5, fontSize: 12, opacity: 0.7 }} />
-                            <Typography variant="caption" sx={{ fontSize: '0.7rem' }}>{video.views || 0}</Typography>
-                        </Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', mr: 1 }}>
-                            <ThumbUpIcon sx={{ mr: 0.5, fontSize: 12, opacity: 0.7 }} />
-                            <Typography variant="caption" sx={{ fontSize: '0.7rem' }}>{video.likes || 0}</Typography>
-                        </Box>
-                        {video.nsfw ? (
+                        onLoad={() => setImageLoading(false)}
+                        onError={handleImageError}
+                    />
+                </Box>
+                <PlayOverlay>
+                    <Box sx={{
+                        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                        borderRadius: '50%',
+                        width: { xs: '40px', sm: '50px' },
+                        height: { xs: '40px', sm: '50px' },
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 0 15px rgba(0, 0, 0, 0.3)'
+                    }}>
+                        <PlayArrowIcon sx={{ fontSize: { xs: 28, sm: 36 }, color: 'white', opacity: 0.9 }} />
+                    </Box>
+                </PlayOverlay>
+                
+                <ThumbnailOverlay>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <VisibilityIcon sx={{ 
+                                fontSize: { xs: 14, sm: 16 }, 
+                                color: 'white',
+                                mr: 0.5,
+                                opacity: 0.9
+                            }} />
                             <Typography 
                                 variant="caption" 
                                 sx={{ 
-                                    fontSize: '0.65rem', 
-                                    ml: 1, 
-                                    color: '#ff6584',
-                                    fontWeight: 'bold'
+                                    fontSize: { xs: '0.7rem', sm: '0.75rem' },
+                                    color: 'white',
+                                    fontWeight: 500
+                                }}
+                            >
+                                {video.views || 0}
+                            </Typography>
+                        </Box>
+                        
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <ThumbUpIcon sx={{ 
+                                fontSize: { xs: 14, sm: 16 }, 
+                                color: 'white',
+                                mr: 0.5,
+                                opacity: 0.9
+                            }} />
+                            <Typography 
+                                variant="caption" 
+                                sx={{ 
+                                    fontSize: { xs: '0.7rem', sm: '0.75rem' },
+                                    color: 'white',
+                                    fontWeight: 500
+                                }}
+                            >
+                                {video.likes || 0}
+                            </Typography>
+                        </Box>
+                    </Box>
+                    
+                    {video.nsfw ? (
+                        <Box sx={{
+                            border: '1px solid red',
+                            borderRadius: '4px',
+                            padding: '2px 6px',
+                        }}>
+                            <Typography 
+                                variant="caption" 
+                                sx={{
+                                    fontSize: { xs: '0.65rem', sm: '0.7rem' },
+                                    color: 'tomato',
+                                    fontWeight: 'bold',
+                                    lineHeight: 1
                                 }}
                             >
                                 NSFW
                             </Typography>
-                        ) : null}
-                    </Box>
-                </CardContent>
+                        </Box>
+                    ) : null}
+                </ThumbnailOverlay>
             </CardActionArea>
+            
+            <CardContent sx={{ 
+                pt: 0.75, 
+                pb: 0.25, 
+                px: { xs: 0.75, sm: 1 },
+                backgroundColor: 'rgba(18, 18, 18, 0.8)',
+                borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+                transition: 'background-color 0.2s ease',
+                '&:hover': {
+                    backgroundColor: 'rgba(25, 25, 25, 0.9)'
+                },
+                minHeight: 'unset',
+                '&:last-child': { pb: 1 } 
+            }}>
+                <Typography 
+                    variant="body2" 
+                    component="div" 
+                    sx={{ 
+                        fontSize: { xs: '0.7rem', sm: '0.8rem' }, 
+                        fontWeight: 500,
+                        lineHeight: 1.2,
+                        m: 0,
+                        display: '-webkit-box',
+                        WebkitLineClamp: 1,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        height: { xs: '1.2em', sm: '1.2em' },
+                        color: 'white'
+                    }}
+                >
+                    {video.title}
+                </Typography>
+                {/* Content area now only shows title since stats are on thumbnail overlay */}
+            </CardContent>
         </StyledCard>
     );
 };

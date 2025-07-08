@@ -195,97 +195,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgContent.trim())}`;
     }, []);
     
-    // Try alternative thumbnail formats based on video URL
-    const loadThumbnail = useCallback((video: Video) => {
-        setThumbnailError(false);
-        
-        // Check if the thumbnailUrl is a path to a local thumbnail
-        if (video.thumbnailUrl && video.thumbnailUrl.startsWith('/thumbnails/')) {
-            // For locally generated thumbnails, construct the full URL
-            const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-            const fullThumbnailUrl = `${apiBaseUrl}${video.thumbnailUrl}`;
-            
-            // Preload the image to check if it exists
-            const img = new Image();
-            img.onload = () => {
-                setThumbnailUrl(fullThumbnailUrl);
-            };
-            img.onerror = () => {
-                // Try to extract video ID for alternative thumbnails
-                tryAlternativeThumbnails(video);
-            };
-            img.src = fullThumbnailUrl;
-            return;
-        }
-        
-        // If there's a direct thumbnail URL, try it first
-        if (video.thumbnailUrl) {
-            const img = new Image();
-            img.onload = () => {
-                setThumbnailUrl(video.thumbnailUrl);
-            };
-            img.onerror = () => {
-                // Try to extract video ID for alternative thumbnails
-                tryAlternativeThumbnails(video);
-            };
-            img.src = video.thumbnailUrl;
-        } else {
-            // No thumbnail URL, try alternatives
-            tryAlternativeThumbnails(video);
-        }
-    }, []);
-    
-    // Try alternative thumbnail formats based on video URL
-    const tryAlternativeThumbnails = useCallback((video: Video) => {
-        // Extract the video ID from the URL
-        let videoId = '';
-        if (video.videoUrl.includes('/DASH_')) {
-            const match = video.videoUrl.match(/v\.redd\.it\/([^/]+)\//i);
-            if (match && match[1]) videoId = match[1];
-        } else {
-            const match = video.videoUrl.match(/v\.redd\.it\/([^/?]+)/i);
-            if (match && match[1]) videoId = match[1];
-        }
-        
-        if (videoId) {
-            // Try alternative thumbnail formats
-            const alternativeUrls = [
-                `https://preview.redd.it/${videoId}.jpg`,
-                `https://external-preview.redd.it/${videoId}.jpg`,
-                `https://i.redd.it/${videoId}.png`,
-                `https://preview.redd.it/${videoId}.png`
-            ];
-            
-            // Try each URL in sequence
-            let currentIndex = 0;
-            const tryNextUrl = () => {
-                if (currentIndex >= alternativeUrls.length) {
-                    // If all alternatives fail, create a custom thumbnail
-                    setThumbnailUrl(createFallbackThumbnail(video.title));
-                    setThumbnailError(true);
-                    return;
-                }
-                
-                const img = new Image();
-                img.onload = () => {
-                    setThumbnailUrl(alternativeUrls[currentIndex]);
-                };
-                img.onerror = () => {
-                    // Try the next URL
-                    currentIndex++;
-                    tryNextUrl();
-                };
-                img.src = alternativeUrls[currentIndex];
-            };
-            
-            tryNextUrl();
-        } else {
-            // If we can't extract ID, use a custom placeholder
-            setThumbnailUrl(createFallbackThumbnail(video.title));
-            setThumbnailError(true);
-        }
-    }, [createFallbackThumbnail]);
-    
     useEffect(() => {
         // Reset state when changing videos
         setProgress(0);
@@ -294,11 +203,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         setIsPlaying(false);
         setIsBuffering(true);
         setIsInitialLoading(true); // Set initial loading to true when changing videos
-        
-        // Load thumbnail for the current video
-        if (currentVideo) {
-            loadThumbnail(currentVideo);
-        }
         
         // Record start time for network speed measurement
         loadStartTimeRef.current = performance.now();
@@ -766,23 +670,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                             }}
                                         />
                                         
-                                        {/* Show thumbnail in background only during initial loading */}
-                                        {isInitialLoading && thumbnailUrl && (
-                                            <img
-                                                src={thumbnailUrl}
-                                                alt={currentVideo.title || 'Video thumbnail'}
-                                                style={{
-                                                    position: 'absolute',
-                                                    top: 0,
-                                                    left: 0,
-                                                    width: '100%',
-                                                    height: '100%',
-                                                    objectFit: 'contain',
-                                                    opacity: 0.3, // Very dim in background
-                                                    zIndex: -1,
-                                                }}
-                                            />
-                                        )}
+                                        {/* Thumbnail display removed as requested */}
                                     </Box>
                                 )}
                                 <video

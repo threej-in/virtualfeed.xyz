@@ -5,6 +5,7 @@ import { RedditScraper } from './services/redditScraper';
 import { logger } from './services/logger';
 import sequelize from './config/database';
 import videoRoutes from './routes/videoRoutes';
+import blacklistRoutes from './routes/blacklistRoutes';
 
 dotenv.config();
 
@@ -22,6 +23,7 @@ app.use('/thumbnails', express.static('public/thumbnails'));
 
 // Routes
 app.use('/api/videos', videoRoutes);
+app.use('/api/blacklist', blacklistRoutes);
 
 // Start server and initialize database
 async function startServer() {

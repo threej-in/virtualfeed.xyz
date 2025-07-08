@@ -76,30 +76,10 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick }) => {
     // Initialize with null to fix the TypeScript error
     const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // Ensure tags is always an array
-    const tags = Array.isArray(video.tags) ? video.tags : 
-                typeof video.tags === 'string' ? JSON.parse(video.tags as string) : 
-                [];
-    
-    const createFallbackThumbnail = useCallback(() => {
-        // Create a custom thumbnail with the video title
-        const title = video.title.substring(0, 30) + (video.title.length > 30 ? '...' : '');
-        // Create a data URL for an SVG with the title text instead of using placeholder.com
-        const svgContent = `
-            <svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
-                <rect width="100%" height="100%" fill="#121212"/>
-                <text x="50%" y="50%" font-family="Arial, sans-serif" font-size="24" fill="#ffffff" text-anchor="middle" dominant-baseline="middle">${title.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')}</text>
-            </svg>
-        `;
-        const fallbackUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgContent.trim())}`;
-        setThumbnailUrl(fallbackUrl);
-        setImageLoading(false);
-    }, [video.title]);
-    
     const tryNextThumbnail = useCallback((urls: string[], index: number) => {
         if (index >= urls.length) {
-            // If all alternatives fail, create a custom thumbnail
-            createFallbackThumbnail();
+            // If all alternatives fail, just set loading to false
+            setImageLoading(false);
             return;
         }
         
@@ -113,35 +93,8 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick }) => {
             tryNextThumbnail(urls, index + 1);
         };
         img.src = urls[index];
-    }, [createFallbackThumbnail]);
-    
-    const tryAlternativeThumbnails = useCallback(() => {
-        // Extract the video ID from the URL
-        let videoId = '';
-        if (video.videoUrl.includes('/DASH_')) {
-            const match = video.videoUrl.match(/v\.redd\.it\/([^/]+)\//i);
-            if (match && match[1]) videoId = match[1];
-        } else {
-            const match = video.videoUrl.match(/v\.redd\.it\/([^/?]+)/i);
-            if (match && match[1]) videoId = match[1];
-        }
-        
-        if (videoId) {
-            // Try alternative thumbnail formats
-            const alternativeUrls = [
-                `https://preview.redd.it/${videoId}.jpg`,
-                `https://external-preview.redd.it/${videoId}.jpg`,
-                `https://i.redd.it/${videoId}.png`,
-                `https://preview.redd.it/${videoId}.png`
-            ];
-            
-            // Try each URL in sequence
-            tryNextThumbnail(alternativeUrls, 0);
-        } else {
-            // If we can't extract ID, use a custom placeholder
-            createFallbackThumbnail();
-        }
-    }, [video.videoUrl, tryNextThumbnail, createFallbackThumbnail]);
+    }, []);
+
     
     // Clean up any effects when component unmounts
     useEffect(() => {
@@ -153,73 +106,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick }) => {
             }
         };
     }, []);
-
-    // Handle thumbnail URLs, which could be a single URL or a JSON string with multiple URLs
-    useEffect(() => {
-        // Check if the thumbnailUrl is a path to a local thumbnail
-        if (video.thumbnailUrl.startsWith('/thumbnails/')) {
-            // For locally generated thumbnails, construct the full URL
-            const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-            const fullThumbnailUrl = `${apiBaseUrl}${video.thumbnailUrl}`;
-            
-            // Preload the image to check if it exists
-            const img = new Image();
-            img.onload = () => {
-                setThumbnailUrl(fullThumbnailUrl);
-                setImageLoading(false);
-            };
-            img.onerror = () => {
-                // If local thumbnail fails, fall back to placeholder
-                createFallbackThumbnail();
-            };
-            img.src = fullThumbnailUrl;
-            return;
-        }
-        
-        // Check if the thumbnailUrl is a JSON array of URLs
-        try {
-            if (video.thumbnailUrl.startsWith('[') && video.thumbnailUrl.endsWith(']')) {
-                const thumbnailUrls = JSON.parse(video.thumbnailUrl) as string[];
-                if (Array.isArray(thumbnailUrls) && thumbnailUrls.length > 0) {
-                    // Try each URL in sequence
-                    tryNextThumbnail(thumbnailUrls, 0);
-                    return;
-                }
-            }
-        } catch (error) {
-            console.error('Error parsing thumbnail URLs:', error);
-        }
-        
-        // If not a JSON array or parsing failed, handle as a single URL
-        if (video.videoUrl.includes('v.redd.it')) {
-            // Preload the image to check if it exists
-            const img = new Image();
-            img.onload = () => {
-                setThumbnailUrl(video.thumbnailUrl);
-                setImageLoading(false);
-            };
-            img.onerror = () => {
-                // Try alternative thumbnail formats
-                tryAlternativeThumbnails();
-            };
-            img.src = video.thumbnailUrl;
-        } else {
-            // For non-Reddit videos, still check if the thumbnail loads
-            const img = new Image();
-            img.onload = () => {
-                setImageLoading(false);
-            };
-            img.onerror = () => {
-                createFallbackThumbnail();
-            };
-            img.src = video.thumbnailUrl;
-        }
-    }, [video.thumbnailUrl, video.videoUrl, tryAlternativeThumbnails, tryNextThumbnail, createFallbackThumbnail]);
-
-    const handleImageLoad = () => {
-        setImageLoading(false);
-    };
-
+    
     const handleImageError = () => {
         // If we haven't reached max retries, try again
         if (retryCount < maxRetries) {
@@ -244,9 +131,9 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick }) => {
                 retryTimeoutRef.current = null;
             }, delay);
         } else {
-            // If we've reached max retries, use fallback
+            // If we've reached max retries, just set loading to false
+            // and keep displaying the skeleton loader
             setImageLoading(false);
-            createFallbackThumbnail();
         }
     };
 

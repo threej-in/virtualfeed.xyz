@@ -1,7 +1,8 @@
 import axios from 'axios';
 import { Video } from '../types/Video';
 
-const API_URL = 'http://localhost:5000/api';
+// Use environment variable with fallback for local development
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 export interface VideoResponse {
     videos: Video[];

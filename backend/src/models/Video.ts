@@ -13,6 +13,7 @@ interface VideoAttributes {
   views: number;
   likes: number;
   nsfw: boolean;
+  blacklisted: boolean;
   metadata: object;
   createdAt?: Date;
   updatedAt?: Date;
@@ -32,6 +33,7 @@ class Video extends Model<VideoAttributes, VideoCreationAttributes> implements V
   public views!: number;
   public likes!: number;
   public nsfw!: boolean;
+  public blacklisted!: boolean;
   public metadata!: object;
 
   // Timestamps
@@ -91,6 +93,11 @@ Video.init(
       allowNull: false,
     },
     nsfw: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+    blacklisted: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: false,

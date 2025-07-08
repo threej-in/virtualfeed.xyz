@@ -98,13 +98,11 @@ export class VideoProcessor {
                 }
             } catch (headError) {
                 // If HEAD request fails, try to infer from URL
-                // logger.info(`HEAD request failed for ${url}, trying to infer from URL`);
             }
             
             // If HEAD request failed or content type wasn't video, try to infer from URL
             if (url.match(/\.(mp4|webm|mov|avi|mkv)$/i)) {
                 const format = url.split('.').pop() || 'mp4';
-                // logger.info(`Inferred video format from URL: ${format}`);
                 return {
                     url,
                     format,
@@ -114,9 +112,6 @@ export class VideoProcessor {
                 };
             }
             
-            // If we can't validate it as a video, log but still accept it
-            // This is the most lenient approach - assume it's a video unless proven otherwise
-            // logger.info(`Could not validate ${url} as video, but accepting anyway`);
             return {
                 url,
                 format: 'unknown',
@@ -145,37 +140,153 @@ export class VideoProcessor {
             
             // Check if we already have a thumbnail for this video
             if (fs.existsSync(thumbnailPath)) {
-                logger.info(`Using existing thumbnail for video: ${videoUrl}`);
                 return thumbnailUrl;
             }
             
-            // Extract the first frame of the video using ffmpeg
-            return new Promise((resolve, reject) => {
-                // Create a new ffmpeg command
-                const command = ffmpeg(videoUrl);
+            // Handle Reddit videos specially with multiple URL formats
+            if (videoUrl.includes('v.redd.it')) {
+                // Extract the video ID from the URL
+                let videoId = '';
                 
-                command
-                    .on('error', (err: Error) => {
-                        logger.error(`Error extracting thumbnail from video: ${videoUrl}`, err);
-                        // Fall back to a placeholder if ffmpeg fails
-                        resolve('https://via.placeholder.com/640x360?text=Video+Preview&bg=121212&fg=ffffff');
-                    })
-                    .on('end', () => {
-                        logger.info(`Successfully generated thumbnail for video: ${videoUrl}`);
-                        resolve(thumbnailUrl);
-                    })
-                    .screenshots({
-                        timestamps: ['00:00:01.000'], // Take screenshot at the 1-second mark
-                        filename: `${hash}.jpg`,
-                        folder: thumbnailDir,
-                        size: '640x360'
-                    });
-            });
+                // Try to extract video ID from different URL formats
+                if (videoUrl.includes('/DASH_')) {
+                    // Format: https://v.redd.it/{id}/DASH_1080.mp4
+                    const match = videoUrl.match(/v\.redd\.it\/([^/]+)\//i);
+                    if (match && match[1]) videoId = match[1];
+                } else {
+                    // Format: https://v.redd.it/{id}
+                    const match = videoUrl.match(/v\.redd\.it\/([^/?]+)/i);
+                    if (match && match[1]) videoId = match[1];
+                }
+                
+                if (videoId) {
+                    // Create a list of possible URL formats to try
+                    const urlFormats = [
+                        videoUrl, // Original URL
+                        `https://v.redd.it/${videoId}/DASH_720.mp4`, // Standard format
+                        `https://v.redd.it/${videoId}/DASH_480.mp4`, // Lower quality
+                        `https://v.redd.it/${videoId}/DASH_360.mp4`, // Even lower quality
+                        `https://v.redd.it/${videoId}/DASH_96.mp4`, // Lowest quality
+                    ];
+                    
+                    // Try each URL format until one works
+                    for (const url of urlFormats) {
+                        try {
+                            await this.generateThumbnailWithFFmpeg(url, thumbnailPath);
+                            return thumbnailUrl;
+                        } catch (formatError) {
+                            // Continue to next format
+                        }
+                    }
+                    
+                    // If all formats failed, fall back to default thumbnail
+                    logger.error(`All URL formats failed for video ID: ${videoId}`);
+                    return this.createDefaultThumbnail(thumbnailPath, thumbnailUrl);
+                }
+            }
+            
+            // For non-Reddit videos or if we couldn't extract a video ID
+            try {
+                await this.generateThumbnailWithFFmpeg(videoUrl, thumbnailPath);
+                return thumbnailUrl;
+            } catch (error) {
+                logger.error(`Error generating thumbnail for video: ${videoUrl}`, error);
+                return this.createDefaultThumbnail(thumbnailPath, thumbnailUrl);
+            }
         } catch (error) {
             // Catch any unexpected errors in the entire thumbnail generation process
             logger.error(`Unexpected error generating thumbnail for URL: ${videoUrl}`, error);
-            return `https://via.placeholder.com/640x360?text=Video+Thumbnail`;
+            
+            // Create a hash for the video URL to maintain consistency
+            const hash = crypto.createHash('md5').update(videoUrl).digest('hex');
+            const thumbnailDir = path.join(process.cwd(), 'public', 'thumbnails');
+            const thumbnailPath = path.join(thumbnailDir, `${hash}.jpg`);
+            const thumbnailUrl = `/thumbnails/${hash}.jpg`;
+            
+            // Ensure the thumbnails directory exists
+            if (!fs.existsSync(thumbnailDir)) {
+                fs.mkdirSync(thumbnailDir, { recursive: true });
+            }
+            
+            try {
+                // Try to copy a default thumbnail if it exists
+                const defaultThumbnailPath = path.join(process.cwd(), 'public', 'thumbnails', 'default.jpg');
+                
+                if (fs.existsSync(defaultThumbnailPath)) {
+                    // Copy the default thumbnail to our hash-based filename
+                    fs.copyFileSync(defaultThumbnailPath, thumbnailPath);
+                } else {
+                    // Create an empty file as a last resort
+                    fs.writeFileSync(thumbnailPath, '');
+                }
+            } catch (copyError) {
+                logger.error(`Error creating default thumbnail in error handler: ${copyError}`);
+            }
+            
+            // Always return the local thumbnail URL path
+            return thumbnailUrl;
         }
+    }
+
+    /**
+     * Helper method to generate a thumbnail using FFmpeg
+     */
+    private static async generateThumbnailWithFFmpeg(videoUrl: string, outputPath: string): Promise<void> {
+        return new Promise((resolve, reject) => {
+            const command = ffmpeg(videoUrl);
+            
+            // Add User-Agent headers for Reddit videos
+            if (videoUrl.includes('v.redd.it')) {
+                command.inputOptions([
+                    '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                    '-headers', 'Referer: https://www.reddit.com/\r\n'
+                ]);
+            }
+            
+            command
+                .on('error', (err: Error) => {
+                    logger.error(`Error extracting thumbnail from video: ${videoUrl}`, err);
+                    reject(err);
+                })
+                .on('end', () => {
+                    resolve();
+                })
+                .screenshots({
+                    timestamps: ['00:00:01.000'], // Take screenshot at the 1-second mark
+                    filename: path.basename(outputPath),
+                    folder: path.dirname(outputPath),
+                    size: '640x360'
+                });
+        });
+    }
+    
+    /**
+     * Helper method to create a default thumbnail when generation fails
+     */
+    private static createDefaultThumbnail(thumbnailPath: string, thumbnailUrl: string): string {
+        try {
+            // Ensure the thumbnails directory exists
+            const thumbnailDir = path.dirname(thumbnailPath);
+            if (!fs.existsSync(thumbnailDir)) {
+                fs.mkdirSync(thumbnailDir, { recursive: true });
+            }
+            
+            // Try to copy a default thumbnail if it exists
+            const defaultThumbnailPath = path.join(process.cwd(), 'public', 'thumbnails', 'default.jpg');
+            
+            if (fs.existsSync(defaultThumbnailPath)) {
+                // Copy the default thumbnail to our hash-based filename
+                fs.copyFileSync(defaultThumbnailPath, thumbnailPath);
+            } else {
+                // Create an empty file as a last resort
+                fs.writeFileSync(thumbnailPath, '');
+            }
+        } catch (copyError) {
+            logger.error(`Error creating default thumbnail: ${copyError}`);
+        }
+        
+        // Always return the local thumbnail URL path
+        return thumbnailUrl;
     }
 
     static extractTags(title: string, subreddit: string): string[] {

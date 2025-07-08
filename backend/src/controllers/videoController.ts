@@ -46,6 +46,9 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
                 whereConditions.push('(nsfw = 0 OR nsfw IS NULL)');
             }
             
+            // Always exclude blacklisted videos
+            whereConditions.push('(blacklisted = 0 OR blacklisted IS NULL)');
+            
             const whereClause = whereConditions.length > 0 
                 ? `WHERE ${whereConditions.join(' AND ')}` 
                 : '';
@@ -281,7 +284,7 @@ export const secureVideoAction = async (req: Request, res: Response): Promise<vo
         }
         
         if (!action || typeof action !== 'string') {
-            res.status(400).json({ error: 'Action parameter is required (nsfw or delete)' });
+            res.status(400).json({ error: 'Action parameter is required (nsfw, blacklist, or delete)' });
             return;
         }
         
@@ -318,6 +321,17 @@ export const secureVideoAction = async (req: Request, res: Response): Promise<vo
                     nsfw: true
                 }
             });
+        } else if (action === 'blacklist') {
+            // Mark video as blacklisted
+            await video.update({ blacklisted: true });
+            res.status(200).json({ 
+                message: 'Video blacklisted successfully',
+                video: {
+                    id: video.id,
+                    title: video.title,
+                    blacklisted: true
+                }
+            });
         } else if (action === 'delete') {
             // Delete the video
             await video.destroy();
@@ -326,7 +340,7 @@ export const secureVideoAction = async (req: Request, res: Response): Promise<vo
                 videoId: id
             });
         } else {
-            res.status(400).json({ error: 'Invalid action. Use "nsfw" or "delete"' });
+            res.status(400).json({ error: 'Invalid action. Use "nsfw", "blacklist", or "delete"' });
         }
     } catch (error) {
         console.error('Error in secureVideoAction:', error);

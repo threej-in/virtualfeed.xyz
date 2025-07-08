@@ -9,11 +9,11 @@ export class RedditScraper {
     private static async processPost(post: Submission, subredditConfig: SubredditConfig): Promise<boolean> {
         try {
             // Log post details for debugging - only at debug level
-            // logger.info(`Processing post: ${post.title} (${post.id}) from r/${post.subreddit}`);
+            // 
 
             // Check if post has minimum score (more lenient now)
             if (post.score < subredditConfig.minScore) {
-                // logger.info(`Skipping post: Score too low (${post.score} < ${subredditConfig.minScore})`);
+                // 
                 return false;
             }
             
@@ -37,7 +37,7 @@ export class RedditScraper {
                 
                 // Only accept posts that have both a primary AI term AND a secondary term
                 if (!(hasPrimaryTerm && hasSecondaryTerm)) {
-                    logger.info(`Skipping post: Insufficient AI-related terms in title/description`);
+                    
                     return false;
                 }
             }
@@ -47,7 +47,7 @@ export class RedditScraper {
                 const postText = `${post.title} ${post.selftext || ''}`.toLowerCase();
                 const hasExcludedTerm = subredditConfig.excludeTerms.some(term => postText.includes(term.toLowerCase()));
                 if (hasExcludedTerm) {
-                    // logger.info(`Skipping post: Contains excluded term`);
+                    // 
                     return false;
                 }
             }
@@ -59,41 +59,33 @@ export class RedditScraper {
             if (post.is_video && post.media?.reddit_video) {
                 // Try to get the highest quality video URL
                 const videoData = post.media.reddit_video;
-                // Don't log full video data JSON to reduce log size
-                logger.info(`Found Reddit video: ${post.id} (${videoData.height}p)`);
-
+                
                 if (videoData.dash_url) {
                     videoUrl = videoData.dash_url;
-                    // logger.info(`Found Reddit DASH video: ${videoUrl}`);
                 } else if (videoData.hls_url) {
                     videoUrl = videoData.hls_url;
-                    // logger.info(`Found Reddit HLS video: ${videoUrl}`);
                 } else if (videoData.fallback_url) {
                     // Remove any quality suffix to get the base URL
                     videoUrl = videoData.fallback_url.replace(/_\d+\.mp4/, '.mp4');
-                    // logger.info(`Found Reddit fallback video: ${videoUrl}`);
                 }
             } 
             // Check for direct video links
             else if (post.url?.match(/\.(mp4|webm)$/i)) {
                 videoUrl = post.url;
-                // logger.info(`Found direct video link: ${videoUrl}`);
             }
             // Check for external video platforms
             else if (post.media?.type === 'youtube.com' || post.url?.includes('youtube.com') || post.url?.includes('youtu.be')) {
-                logger.info(`Skipping YouTube video`);
+                
                 return false;
             }
 
             if (!videoUrl) {
-                // logger.info(`Skipping post: No video URL found`);
                 return false;
             }
 
             // Validate video URL
             const videoMetadata = await VideoProcessor.validateVideo(videoUrl);
             if (!videoMetadata) {
-                // logger.info(`Skipping post: Invalid video URL: ${videoUrl}`);
                 return false;
             }
 
@@ -107,7 +99,6 @@ export class RedditScraper {
                 tags = VideoProcessor.extractTags(post.title, post.subreddit.display_name);
             } catch (error) {
                 // Fallback tag extraction if the method is not available
-                logger.warn('VideoProcessor.extractTags not available, using fallback tag extraction');
                 const tagSet = new Set<string>();
                 
                 // Add subreddit as a tag
@@ -128,12 +119,7 @@ export class RedditScraper {
             try {
                 // Check if post is marked as NSFW (over_18 property in Reddit API)
                 const isNsfw = post.over_18 === true;
-                
-                // Log NSFW status
-                if (isNsfw) {
-                    logger.info(`Post is marked as NSFW: ${post.id}`);
-                }
-                
+              
                 // Check if video with this redditId already exists
                 const existingVideo = await Video.findOne({ where: { redditId: post.id } });
                 
@@ -151,7 +137,6 @@ export class RedditScraper {
                     
                     if (videoId) {
                         audioUrl = `https://v.redd.it/${videoId}/DASH_audio.mp4`;
-                        logger.info(`Extracted audio URL for video: ${audioUrl}`);
                     }
                 }
                 
@@ -183,16 +168,15 @@ export class RedditScraper {
                     // Update existing video
                     await existingVideo.update(videoData);
                     video = existingVideo;
-                    logger.info(`Updated existing video: ${video.title} (${video.id})`);
                 } else {
                     // Create new video
                     video = await Video.create({
                         ...videoData,
                         createdAt: new Date(post.created_utc * 1000),
                         views: 0,
-                        likes: 0
+                        likes: 0,
+                        blacklisted: false // Add the blacklisted field with default value
                     });
-                    logger.info(`Successfully processed new video: ${video.title} (${video.id})`);
                 }
                 
                 return true;
@@ -229,7 +213,6 @@ export class RedditScraper {
             // Check if subreddit exists and is accessible
             try {
                 // Get hot posts with reduced limit (25 instead of 100)
-                logger.info(`Fetching hot posts from r/${subredditName}`);
                 const hotPosts = await redditClient.getSubreddit(subredditName).getHot({ limit: 25 });
                 for (const post of hotPosts) {
                     if (!seenIds.has(post.id)) {
@@ -243,7 +226,6 @@ export class RedditScraper {
 
                 // Get only top posts from one time period (week) instead of all four periods
                 // This significantly reduces the number of API calls
-                logger.info(`Fetching week top posts from r/${subredditName}`);
                 const topPosts = await redditClient.getSubreddit(subredditName).getTop({ time: 'week', limit: 25 });
                 for (const post of topPosts) {
                     if (!seenIds.has(post.id)) {
@@ -252,14 +234,11 @@ export class RedditScraper {
                     }
                 }
 
-                logger.info(`Retrieved ${posts.length} total posts from r/${subredditName}`);
             } catch (subredditError: any) {
                 // Check if this is a banned subreddit error
                 if (subredditError.statusCode === 404 && 
                     subredditError.error && 
                     subredditError.error.reason === 'banned') {
-                    logger.warn(`Skipping banned subreddit: r/${subredditName}`);
-                    // We'll return an empty array for banned subreddits
                 } else {
                     // Re-throw other errors to be caught by the outer catch block
                     throw subredditError;
@@ -275,7 +254,6 @@ export class RedditScraper {
     private static async scrapeSubreddit(subredditConfig: SubredditConfig): Promise<number> {
         let processedCount = 0;
         try {
-            logger.info(`Starting to scrape r/${subredditConfig.name}`);
             const posts = await this.getSubredditPosts(subredditConfig.name);
             
             for (const post of posts) {
@@ -287,8 +265,6 @@ export class RedditScraper {
                     // Continue with next post
                 }
             }
-
-            logger.info(`Finished scraping r/${subredditConfig.name}. Processed ${processedCount} new videos`);
         } catch (subredditError) {
             logger.error(`Error scraping subreddit: ${subredditConfig.name}`, subredditError);
             // Continue with next subreddit
@@ -297,7 +273,6 @@ export class RedditScraper {
     }
 
     static async scrapeSubreddits(): Promise<void> {
-        logger.info('Starting Reddit scraping process');
         let totalProcessed = 0;
 
         try {
@@ -305,13 +280,11 @@ export class RedditScraper {
             // This helps avoid Reddit API rate limits
             for (const config of subreddits) {
                 try {
-                    logger.info(`Processing subreddit: r/${config.name}`);
                     const count = await this.scrapeSubreddit(config);
                     totalProcessed += count;
                     
                     // Add a 5-second delay between subreddits to avoid rate limiting
                     if (config !== subreddits[subreddits.length - 1]) {
-                        logger.info(`Waiting 5 seconds before processing next subreddit...`);
                         await this.delay(5000);
                     }
                 } catch (error) {
@@ -320,7 +293,6 @@ export class RedditScraper {
                 }
             }
             
-            logger.info(`Reddit scraping completed. Total new videos processed: ${totalProcessed}`);
         } catch (error) {
             logger.error('Fatal error during Reddit scraping', error);
         }

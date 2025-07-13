@@ -6,6 +6,7 @@ import MovieIcon from '@mui/icons-material/Movie';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import { Video } from '../../types/Video';
+import RedditVideoEmbed from './RedditVideoEmbed';
 
 interface VideoCardProps {
     video: Video;
@@ -69,16 +70,59 @@ const ThumbnailOverlay = styled(Box)(({ theme }) => ({
 
 const VideoCard: React.FC<VideoCardProps> = ({ video, onClick }) => {
     const [imageLoading, setImageLoading] = useState(true);
-    const [thumbnailUrl, setThumbnailUrl] = useState<string>(video.thumbnailUrl);
+    const [thumbnailUrl, setThumbnailUrl] = useState<string>(video.thumbnailUrl || '');
     const [retryCount, setRetryCount] = useState(0);
     const maxRetries = 3;
     const imageRef = useRef<HTMLImageElement>(null);
+    const cardRef = useRef<HTMLDivElement>(null);
     // Initialize with null to fix the TypeScript error
     const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+    
+    // Create a fallback thumbnail with the video title
+    const createFallbackThumbnail = useCallback((title: string) => {
+        try {
+            // Sanitize the title first to ensure it's safe for SVG and URI encoding
+            let sanitizedTitle = 'No Title';
+            if (title) {
+                // Shorten the title
+                let shortened = title.substring(0, 30) + (title.length > 30 ? '...' : '');
+                
+                // Replace special characters for XML safety
+                shortened = shortened
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;');
+                
+                // Remove control characters (ES5 compatible)
+                shortened = shortened.replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
+                
+                // Remove non-ASCII characters (ES5 compatible approach)
+                sanitizedTitle = shortened.replace(/[^\x00-\x7F]/g, '');
+            }
+                
+            // Create a data URL for an SVG with the title text
+            const svgContent = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
+                    <rect width="100%" height="100%" fill="#121212"/>
+                    <text x="50%" y="50%" font-family="Arial, sans-serif" font-size="24" fill="#ffffff" text-anchor="middle" dominant-baseline="middle">${sanitizedTitle}</text>
+                </svg>
+            `;
+            
+            // Ensure the SVG content is properly trimmed and encoded
+            return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgContent.trim())}`;
+        } catch (error) {
+            console.error('Error creating fallback thumbnail:', error);
+            // Return a simple colored rectangle if encoding fails
+            return 'data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22640%22%20height%3D%22360%22%3E%3Crect%20width%3D%22100%25%22%20height%3D%22100%25%22%20fill%3D%22%23121212%22%2F%3E%3C%2Fsvg%3E';
+        }
+    }, []);
+    
     const tryNextThumbnail = useCallback((urls: string[], index: number) => {
         if (index >= urls.length) {
-            // If all alternatives fail, just set loading to false
+            // If all alternatives fail, create a fallback thumbnail with the video title
+            const fallbackThumbnail = createFallbackThumbnail(video.title);
+            setThumbnailUrl(fallbackThumbnail);
             setImageLoading(false);
             return;
         }
@@ -92,20 +136,91 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick }) => {
             // Try the next URL
             tryNextThumbnail(urls, index + 1);
         };
+        img.crossOrigin = 'anonymous'; // Add cross-origin handling
         img.src = urls[index];
-    }, []);
-
+    }, [video.title, createFallbackThumbnail]);
     
-    // Clean up any effects when component unmounts
+    // Use Intersection Observer for lazy loading
     useEffect(() => {
+        // Create an observer for lazy loading
+        const observer = new IntersectionObserver((entries) => {
+            if (entries[0].isIntersecting) {
+                // Only load the image when the card is visible
+                if (video.thumbnailUrl) {
+                    // Try to load the thumbnail from different sources
+                    const apiBaseUrl = process.env.REACT_APP_API_BASE_URL || '';
+                    
+                    // Only use thumbnails from our own server
+                    if (video.thumbnailUrl && video.thumbnailUrl.startsWith('/thumbnails/')) {
+                        // Make sure the thumbnail path has the .jpg extension
+                        const thumbnailPath = video.thumbnailUrl.endsWith('.jpg') 
+                            ? video.thumbnailUrl 
+                            : `${video.thumbnailUrl}.jpg`;
+                        
+                        // Direct path to the thumbnail in the public directory
+                        // The server is configured to serve files from the public directory directly
+                        const thumbnailUrl = `${thumbnailPath}`;
+                        
+                        const img = new Image();
+                        img.onload = () => {
+                            setThumbnailUrl(thumbnailUrl);
+                            setImageLoading(false);
+                        };
+                        img.onerror = (e) => {
+                            console.error(`Local thumbnail failed to load: ${thumbnailUrl}`, e);
+                            // Try one more time with apiBaseUrl prefix
+                            const fallbackUrl = `${apiBaseUrl}${thumbnailPath}`;
+                            
+                            const fallbackImg = new Image();
+                            fallbackImg.onload = () => {
+                                setThumbnailUrl(fallbackUrl);
+                                setImageLoading(false);
+                            };
+                            fallbackImg.onerror = () => {
+                                // Create fallback with title as last resort
+                                console.error(`Both thumbnail URLs failed to load for: ${video.title}`);
+                                const svgFallback = createFallbackThumbnail(video.title);
+                                setThumbnailUrl(svgFallback);
+                                setImageLoading(false);
+                            };
+                            fallbackImg.crossOrigin = 'anonymous';
+                            fallbackImg.src = fallbackUrl;
+                        };
+                        img.crossOrigin = 'anonymous';
+                        img.src = thumbnailUrl;
+                    } else {
+                        // If no local thumbnail is available, use SVG fallback
+                        const fallbackThumbnail = createFallbackThumbnail(video.title);
+                        setThumbnailUrl(fallbackThumbnail);
+                        setImageLoading(false);
+                    }
+                } else {
+                    // If no thumbnail URL, create a fallback
+                    const fallbackThumbnail = createFallbackThumbnail(video.title);
+                    setThumbnailUrl(fallbackThumbnail);
+                    setImageLoading(false);
+                }
+                
+                // Disconnect the observer after loading
+                observer.disconnect();
+            }
+        }, { rootMargin: '200px', threshold: 0.1 });
+        
+        // Start observing the card
+        if (cardRef.current) {
+            observer.observe(cardRef.current);
+        }
+        
+        // Cleanup function
         return () => {
+            observer.disconnect();
             // Clear any pending retry timeouts
             if (retryTimeoutRef.current !== null) {
                 clearTimeout(retryTimeoutRef.current);
                 retryTimeoutRef.current = null;
             }
         };
-    }, []);
+    }, [video.thumbnailUrl, video.title, video.redditId, video.metadata, tryNextThumbnail, createFallbackThumbnail]);
     
     const handleImageError = () => {
         // If we haven't reached max retries, try again
@@ -132,36 +247,36 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick }) => {
             }, delay);
         } else {
             // If we've reached max retries, just set loading to false
-            // and keep displaying the skeleton loader
             setImageLoading(false);
         }
     };
 
     return (
-        <StyledCard title={video.id + ""}>
+        <StyledCard ref={cardRef} title={video.id + ""}>
             <CardActionArea onClick={onClick} sx={{ position: 'relative' }}>
-                {imageLoading && (
-                    <Skeleton 
-                        variant="rectangular" 
-                        height={180}
-                        animation="wave"
-                        sx={{ 
-                            bgcolor: 'grey.800',
-                            '@media (max-width: 600px)': {
-                                height: '160px'
-                            }
-                        }}
-                    />
-                )}
                 {imageLoading && (
                     <Box 
                         sx={{ 
                             position: 'relative',
                             paddingTop: '56.25%', // 16:9 aspect ratio
                             overflow: 'hidden',
-                            backgroundColor: 'rgba(18, 18, 18, 0.8)',
+                            '@media (min-width: 960px)': {
+                                paddingTop: '62%' // Match the actual thumbnail aspect ratio on desktop
+                            },
                         }}
                     >
+                        <Skeleton 
+                            variant="rectangular" 
+                            animation="wave"
+                            sx={{ 
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                width: '100%',
+                                height: '100%',
+                                bgcolor: 'grey.800',
+                            }}
+                        />
                         <Box sx={{
                             position: 'absolute',
                             top: 0,
@@ -187,12 +302,12 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick }) => {
                         paddingTop: '62%' // Slightly taller on desktop for better visibility
                     },
                 }}>
-                    <CardMedia
-                        component="img"
-                        image={thumbnailUrl}
+                    {/* Use a regular img element instead of CardMedia for better control */}
+                    <img
+                        src={thumbnailUrl}
                         alt={video.title}
                         ref={imageRef}
-                        sx={{
+                        style={{
                             display: imageLoading ? 'none' : 'block',
                             position: 'absolute',
                             top: 0,
@@ -206,6 +321,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick }) => {
                         }}
                         onLoad={() => setImageLoading(false)}
                         onError={handleImageError}
+                        loading="lazy"
                     />
                 </Box>
                 <PlayOverlay>
@@ -225,6 +341,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick }) => {
                 
                 <ThumbnailOverlay>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        {/* Views count */}
                         <Box sx={{ display: 'flex', alignItems: 'center' }}>
                             <VisibilityIcon sx={{ 
                                 fontSize: { xs: 14, sm: 16 }, 
@@ -244,6 +361,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick }) => {
                             </Typography>
                         </Box>
                         
+                        {/* Upvotes count */}
                         <Box sx={{ display: 'flex', alignItems: 'center' }}>
                             <ThumbUpIcon sx={{ 
                                 fontSize: { xs: 14, sm: 16 }, 
@@ -259,44 +377,36 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick }) => {
                                     fontWeight: 500
                                 }}
                             >
-                                {video.likes || 0}
+                                {video.likes || video.metadata?.upvotes || video.metadata?.redditScore || 0}
                             </Typography>
                         </Box>
                     </Box>
                     
-                    {video.nsfw ? (
-                        <Box sx={{
-                            border: '1px solid red',
-                            borderRadius: '4px',
-                            padding: '2px 6px',
-                        }}>
+                    {video.redditId && (
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <ArrowUpwardIcon sx={{ 
+                                fontSize: { xs: 14, sm: 16 }, 
+                                color: 'white',
+                                mr: 0.5,
+                                opacity: 0.9
+                            }} />
                             <Typography 
                                 variant="caption" 
-                                sx={{
-                                    fontSize: { xs: '0.65rem', sm: '0.7rem' },
-                                    color: 'tomato',
-                                    fontWeight: 'bold',
-                                    lineHeight: 1
+                                sx={{ 
+                                    fontSize: { xs: '0.7rem', sm: '0.75rem' },
+                                    color: 'white',
+                                    fontWeight: 500
                                 }}
                             >
-                                NSFW
+                                r/{video.subreddit}
                             </Typography>
                         </Box>
-                    ) : null}
+                    )}
                 </ThumbnailOverlay>
             </CardActionArea>
             
             <CardContent sx={{ 
-                pt: 0.75, 
-                pb: 0.25, 
-                px: { xs: 0.75, sm: 1 },
-                backgroundColor: 'rgba(18, 18, 18, 0.8)',
-                borderTop: '1px solid rgba(255, 255, 255, 0.05)',
-                transition: 'background-color 0.2s ease',
-                '&:hover': {
-                    backgroundColor: 'rgba(25, 25, 25, 0.9)'
-                },
-                minHeight: 'unset',
+                p: 1, 
                 '&:last-child': { pb: 1 } 
             }}>
                 <Typography 
@@ -322,6 +432,6 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick }) => {
             </CardContent>
         </StyledCard>
     );
-};
+}
 
 export default VideoCard;

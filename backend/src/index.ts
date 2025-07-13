@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import * as path from 'path';
 import { RedditScraper } from './services/redditScraper';
 import { logger } from './services/logger';
 import sequelize from './config/database';
@@ -16,10 +17,29 @@ const port = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
+// Configure express.static with proper MIME types
+const staticOptions = {
+  setHeaders: (res: express.Response, path: string) => {
+    // Set appropriate content type for images
+    if (path.endsWith('.jpg') || path.endsWith('.jpeg')) {
+      res.set('Content-Type', 'image/jpeg');
+    } else if (path.endsWith('.png')) {
+      res.set('Content-Type', 'image/png');
+    }
+    
+    // Add cache control headers
+    res.set('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
+    res.set('X-Content-Type-Options', 'nosniff'); // Prevent MIME sniffing
+  }
+};
+
 // Serve static files from the public directory
-app.use(express.static('public'));
-// Explicitly serve thumbnails directory
-app.use('/thumbnails', express.static('public/thumbnails'));
+app.use(express.static(path.join(__dirname, '../public'), staticOptions));
+
+// Log all requests to help with debugging
+app.use((req, res, next) => {
+  next();
+});
 
 // Routes
 app.use('/api/videos', videoRoutes);

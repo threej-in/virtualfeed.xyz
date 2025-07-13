@@ -160,28 +160,14 @@ export class VideoProcessor {
                 }
                 
                 if (videoId) {
-                    // Create a list of possible URL formats to try
-                    const urlFormats = [
-                        videoUrl, // Original URL
-                        `https://v.redd.it/${videoId}/DASH_720.mp4`, // Standard format
-                        `https://v.redd.it/${videoId}/DASH_480.mp4`, // Lower quality
-                        `https://v.redd.it/${videoId}/DASH_360.mp4`, // Even lower quality
-                        `https://v.redd.it/${videoId}/DASH_96.mp4`, // Lowest quality
-                    ];
-                    
-                    // Try each URL format until one works
-                    for (const url of urlFormats) {
-                        try {
-                            await this.generateThumbnailWithFFmpeg(url, thumbnailPath);
-                            return thumbnailUrl;
-                        } catch (formatError) {
-                            // Continue to next format
-                        }
+                    // Just use the original URL without trying multiple formats
+                    try {
+                        await this.generateThumbnailWithFFmpeg(videoUrl, thumbnailPath);
+                        return thumbnailUrl;
+                    } catch (error) {
+                        logger.error(`Failed to generate thumbnail for: ${videoUrl}`, error);
+                        return this.createDefaultThumbnail(thumbnailPath, thumbnailUrl);
                     }
-                    
-                    // If all formats failed, fall back to default thumbnail
-                    logger.error(`All URL formats failed for video ID: ${videoId}`);
-                    return this.createDefaultThumbnail(thumbnailPath, thumbnailUrl);
                 }
             }
             
@@ -233,30 +219,42 @@ export class VideoProcessor {
      */
     private static async generateThumbnailWithFFmpeg(videoUrl: string, outputPath: string): Promise<void> {
         return new Promise((resolve, reject) => {
-            const command = ffmpeg(videoUrl);
-            
-            // Add User-Agent headers for Reddit videos
-            if (videoUrl.includes('v.redd.it')) {
-                command.inputOptions([
-                    '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                    '-headers', 'Referer: https://www.reddit.com/\r\n'
-                ]);
+            try {
+                const command = ffmpeg(videoUrl);
+                
+                // Add User-Agent headers for Reddit videos
+                if (videoUrl.includes('v.redd.it')) {
+                    // Fix the headers format - use a single -headers option with all headers
+                    command.inputOptions([
+                        '-headers',
+                        'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36\r\nReferer: https://www.reddit.com/\r\n'
+                    ]);
+                }
+                
+                command
+                    .on('error', (err: Error) => {
+                        logger.error(`Error extracting thumbnail from video: ${videoUrl}`);
+                        logger.error(`Error details: ${err.message}`);
+                        reject(err);
+                    })
+                    .on('end', () => {
+                        resolve();
+                    })
+                    // Use a more direct approach with explicit output path
+                    .outputOptions([
+                        '-ss', '00:00:01.000',  // Seek to 1 second
+                        '-frames:v', '1',       // Extract only one frame
+                        '-q:v', '2',           // High quality
+                        '-vf', 'scale=640:360'  // Scale to desired size
+                    ])
+                    .output(outputPath)
+                    .outputFormat('image2')    // Force image output format
+                    .run();  // Execute the command
+            } catch (error: unknown) {
+                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                logger.error(`Exception in FFmpeg initialization: ${errorMessage}`);
+                reject(error);
             }
-            
-            command
-                .on('error', (err: Error) => {
-                    logger.error(`Error extracting thumbnail from video: ${videoUrl}`, err);
-                    reject(err);
-                })
-                .on('end', () => {
-                    resolve();
-                })
-                .screenshots({
-                    timestamps: ['00:00:01.000'], // Take screenshot at the 1-second mark
-                    filename: path.basename(outputPath),
-                    folder: path.dirname(outputPath),
-                    size: '640x360'
-                });
         });
     }
     

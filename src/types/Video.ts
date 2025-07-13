@@ -21,4 +21,15 @@ export interface Video {
         upvotes?: number;
         audioUrl?: string; // Added for Reddit videos with separate audio tracks
     };
+    // Reddit-specific media fields
+    secure_media?: {
+        reddit_video?: {
+            fallback_url: string;
+            dash_url?: string;
+            hls_url?: string;
+            height?: number;
+            width?: number;
+            duration?: number;
+        }
+    };
 }

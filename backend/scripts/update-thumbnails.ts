@@ -19,38 +19,63 @@ dotenv.config();
  */
 function generateThumbnail(videoUrl: string, outputPath: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const command = ffmpeg(videoUrl);
+    logger.info(`Starting FFmpeg process for URL: ${videoUrl}`);
     
-    // Add User-Agent headers for Reddit videos
-    if (videoUrl.includes('v.redd.it')) {
-      command.inputOptions([
-        '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        '-headers', 'Referer: https://www.reddit.com/\r\n'
-      ]);
+    try {
+      const command = ffmpeg(videoUrl);
+      
+      // Add User-Agent headers for Reddit videos
+      if (videoUrl.includes('v.redd.it')) {
+        logger.info(`Adding Reddit-specific headers for: ${videoUrl}`);
+        // Fix the headers format - use a single -headers option with all headers
+        command.inputOptions([
+          '-headers',
+          'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36\r\nReferer: https://www.reddit.com/\r\n'
+        ]);
+      }
+      
+      // Add more verbose logging
+      command
+        .on('start', (commandLine: string) => {
+          logger.info(`FFmpeg command: ${commandLine}`);
+        })
+        .on('progress', (progress: any) => {
+          logger.info(`FFmpeg progress: ${JSON.stringify(progress)}`);
+        })
+        .on('error', (err: Error) => {
+          logger.error(`Error extracting thumbnail from video: ${videoUrl}`);
+          logger.error(`Error details: ${err.message}`);
+          reject(err);
+        })
+        .on('end', () => {
+          logger.info(`FFmpeg successfully generated thumbnail at: ${outputPath}`);
+          resolve();
+        })
+        // Use a more direct approach with explicit output path
+        .outputOptions([
+          '-ss', '00:00:01.000',  // Seek to 1 second
+          '-frames:v', '1',       // Extract only one frame
+          '-q:v', '2',           // High quality
+          '-vf', 'scale=640:360'  // Scale to desired size
+        ])
+        .output(outputPath)
+        .outputFormat('image2')    // Force image output format
+        .run();  // Execute the command
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`Exception in FFmpeg initialization: ${errorMessage}`);
+      reject(error);
     }
-    
-    command
-      .on('error', (err: Error) => {
-        logger.error(`Error extracting thumbnail from video: ${videoUrl}`, err);
-        reject(err);
-      })
-      .on('end', () => {
-        logger.info(`Successfully generated thumbnail for video: ${videoUrl}`);
-        resolve();
-      })
-      .screenshots({
-        timestamps: ['00:00:01.000'], // Take screenshot at the 1-second mark
-        filename: path.basename(outputPath),
-        folder: path.dirname(outputPath),
-        size: '640x360'
-      });
   });
 }
 
 /**
  * Updates thumbnail URLs in the database and regenerates thumbnails using FFmpeg
+ * @param options Configuration options for the update process
+ * @param options.regenerateFailedOnly If true, only regenerate thumbnails that previously failed
+ * @param options.forceRegenerate If true, regenerate all thumbnails even if they already exist
  */
-async function updateThumbnailUrls() {
+async function updateThumbnailUrls(options: { regenerateFailedOnly?: boolean; forceRegenerate?: boolean } = {}) {
   try {
     // Connect to database
     await sequelize.authenticate();
@@ -93,6 +118,24 @@ async function updateThumbnailUrls() {
       logger.info(`Processing video ${video.id} - ${video.title || 'Untitled'}`);
       logger.info(`Video URL: ${video.videoUrl}`);
       logger.info(`Thumbnail path: ${thumbnailPath}`);
+      
+      // Check if we should process this thumbnail
+      const thumbnailExists = fs.existsSync(thumbnailPath) && fs.statSync(thumbnailPath).size > 0;
+      
+      // Skip if thumbnail exists and we're not forcing regeneration
+      if (thumbnailExists && !options.forceRegenerate) {
+        // If we're only regenerating failed thumbnails, skip this one since it exists
+        if (options.regenerateFailedOnly) {
+          logger.info(`Thumbnail already exists for video ${video.id}. Skipping.`);
+          skippedCount++;
+          continue;
+        }
+      }
+      
+      // If we're only regenerating failed thumbnails, check if this is a failed one
+      if (options.regenerateFailedOnly && !thumbnailExists) {
+        logger.info(`Found failed thumbnail for video ${video.id}. Attempting to regenerate.`);
+      }
 
       try {
         // Fix Reddit video URLs that might be truncated
@@ -202,8 +245,41 @@ async function updateThumbnailUrls() {
   }
 }
 
+// Parse command line arguments
+const args = process.argv.slice(2);
+const options = {
+  regenerateFailedOnly: args.includes('--failed-only') || args.includes('-f'),
+  forceRegenerate: args.includes('--force') || args.includes('-F')
+};
+
+// Display help if requested
+if (args.includes('--help') || args.includes('-h')) {
+  console.log(`
+Thumbnail Update Script
+----------------------
+
+Usage: ts-node update-thumbnails.ts [options]
+
+Options:
+  -f, --failed-only    Only regenerate thumbnails that previously failed
+  -F, --force          Force regeneration of all thumbnails even if they exist
+  -h, --help           Display this help message
+
+Examples:
+  ts-node update-thumbnails.ts                 # Update all missing thumbnails
+  ts-node update-thumbnails.ts --failed-only   # Only regenerate failed thumbnails
+  ts-node update-thumbnails.ts --force         # Regenerate all thumbnails
+`);
+  process.exit(0);
+}
+
+// Log the selected options
+logger.info('Starting thumbnail update with options:');
+logger.info(`- Regenerate failed only: ${options.regenerateFailedOnly}`);
+logger.info(`- Force regenerate all: ${options.forceRegenerate}`);
+
 // Run the update function
-updateThumbnailUrls()
+updateThumbnailUrls(options)
   .then(() => {
     logger.info('Script completed successfully');
     process.exit(0);

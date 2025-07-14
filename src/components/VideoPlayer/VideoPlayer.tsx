@@ -28,7 +28,8 @@ import {
     ArrowUpward as ArrowUpwardIcon,
     Link as LinkIcon,
     Loop as LoopIcon,
-    Reddit as RedditIcon
+    Reddit as RedditIcon,
+    Settings as SettingsIcon
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSwipeable } from 'react-swipeable';
@@ -58,10 +59,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
     const [duration, setDuration] = useState(0);
     const [showControls, setShowControls] = useState(true);
     const [showDetails, setShowDetails] = useState(false);
-    const [videoQuality, setVideoQuality] = useState<string>('auto');
+    const [videoQuality, setVideoQuality] = useState<string>('480'); // Default to 480p for stability
     const [isBuffering, setIsBuffering] = useState(false);
+    const [showQualityMenu, setShowQualityMenu] = useState(false);
     const [isInitialLoading, setIsInitialLoading] = useState(true);
-    const [networkSpeed, setNetworkSpeed] = useState<number | null>(null);
+    const [networkSpeed, setNetworkSpeed] = useState<number | null>(null); // Kept for compatibility
     
     const videoRef = useRef<HTMLVideoElement>(null);
     const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -84,55 +86,17 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         }
     }, [currentVideo, open]);
     
-    // Measure network speed when loading video
+    // Measure network speed when loading video (simplified)
     const measureNetworkSpeed = useCallback(() => {
-        if (videoRef.current) {
-            const loadEndTime = performance.now();
-            const loadStartTime = loadStartTimeRef.current;
-            const loadTimeMs = loadEndTime - loadStartTime;
-            
-            if (loadTimeMs > 0 && videoRef.current.videoWidth > 0) {
-                // Estimate video size based on resolution and duration
-                // This is a rough estimate - 0.1 MB per second for SD, scaled by resolution
-                const videoDuration = videoRef.current.duration || 30; // Default to 30s if unknown
-                const videoHeight = videoRef.current.videoHeight || 480;
-                const estimatedSizeMB = (videoDuration * 0.1) * (videoHeight / 480);
-                
-                // Calculate speed in Mbps (megabits per second)
-                const speedMbps = (estimatedSizeMB * 8) / (loadTimeMs / 1000);
-                console.log(`Estimated network speed: ${speedMbps.toFixed(2)} Mbps`);
-                setNetworkSpeed(speedMbps);
-            }
-        }
+        // Simplified network speed measurement to avoid quality switching
+        console.log('Video loaded successfully');
     }, []);
 
         // Get appropriate video quality based on network conditions
     const getVideoQuality = useCallback((videoId: string): string => {
-        // If user has manually selected a quality, use that
-        if (videoQuality !== 'auto') {
-            return videoQuality;
-        }
-        
-        // Auto quality selection based on network speed
-        if (networkSpeed !== null) {
-            // Network speed is in Mbps
-            if (networkSpeed < 1.5) {
-                return '240';
-            } else if (networkSpeed < 3) {
-                return '360';
-            } else if (networkSpeed < 5) {
-                return '480';
-            } else if (networkSpeed < 8) {
-                return '720';
-            } else {
-                return '1080';
-            }
-        }
-        
-        // Default to 480p if we don't have network info yet
-        // This is a good balance between quality and initial load time
-        return '480';
-    }, [networkSpeed, videoQuality]);
+        // Use the selected quality directly for stability
+        return videoQuality;
+    }, [videoQuality]);
 
     // Get video URL for Reddit videos with multiple formats
     const getVideoUrl = useCallback((url: string) => {
@@ -161,25 +125,12 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
     }, [getVideoQuality]);
     
 
-        // Preload the next video to improve playback experience
+        // Preload function is now disabled to reduce network usage
     const preloadNextVideo = useCallback(() => {
-        // Check if there's a next video to preload
-        if (currentIndex < videos.length - 1) {
-            const nextVideo = videos[currentIndex + 1];
-            if (nextVideo && nextVideo.videoUrl) {
-                // Create a video element for preloading
-                if (!nextVideoRef.current) {
-                    nextVideoRef.current = document.createElement('video');
-                }
-                
-                // Set preload attribute and src
-                nextVideoRef.current.preload = 'metadata';
-                nextVideoRef.current.src = getVideoUrl(nextVideo.videoUrl);
-                
-                console.log('Preloading next video:', nextVideo.title);
-            }
-        }
-    }, [currentIndex, videos, getVideoUrl]);
+        // Preloading is disabled to prevent excessive network usage
+        // This function is kept as a placeholder to maintain code structure
+        return;
+    }, []);
     
 
     // Create a fallback thumbnail with the video title
@@ -225,8 +176,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                     setIsInitialLoading(false); // Mark initial loading as complete once video can play
                     measureNetworkSpeed();
                     
-                    // Preload next video after current one is ready
-                    preloadNextVideo();
+                    // Preloading next video is disabled to reduce network usage
+                    // preloadNextVideo(); - removed to prevent excessive network usage
                 };
                 
                 // Use a variable to track if we're currently attempting to play
@@ -505,6 +456,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                     togglePlay();
                     e.preventDefault(); // Prevent page scrolling
                     break;
+                case 'Escape':
+                    setShowQualityMenu(false);
+                    break;
             }
         };
         
@@ -516,6 +470,23 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
             window.removeEventListener('keydown', handleKeyDown);
         };
     }, [open, goToNextVideo, goToPrevVideo, togglePlay]);
+
+    // Close quality menu when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (showQualityMenu) {
+                setShowQualityMenu(false);
+            }
+        };
+
+        if (showQualityMenu) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [showQualityMenu]);
 
     if (!currentVideo || !open) return null;
 
@@ -700,44 +671,23 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                         setIsBuffering(false);
                                     }}
                                     onStalled={() => {
-                                        // If stalled for too long, try a lower quality
-                                        if (videoRef.current && currentVideo.videoUrl.includes('v.redd.it')) {
-                                            const videoId = currentVideo.videoUrl.match(/v\.redd\.it\/([^/?]+)/i)?.[1];
-                                            if (videoId) {
-                                                // Try a lower quality
-                                                const currentQuality = parseInt(getVideoQuality(videoId));
-                                                if (currentQuality > 240) {
-                                                    const lowerQuality = Math.max(240, currentQuality - 240);
-                                                    setVideoQuality(lowerQuality.toString());
-                                                    
-                                                    // Save current time before changing source
-                                                    const currentTime = videoRef.current.currentTime;
-                                                    videoRef.current.src = `https://v.redd.it/${videoId}/DASH_${lowerQuality}.mp4`;
-                                                    videoRef.current.load();
-                                                    
-                                                    // After loading, restore time and play
-                                                    videoRef.current.onloadedmetadata = () => {
-                                                        videoRef.current!.currentTime = currentTime;
-                                                        videoRef.current!.play().catch(err => console.error('Playback error after quality reduction:', err));
-                                                    };
-                                                }
-                                            }
-                                        }
+                                        // Don't automatically switch quality on stall
+                                        // This prevents constant quality switching that causes poor UX
+                                        console.log('Video stalled - maintaining current quality for stability');
                                     }}
                                     onError={(e) => {
                                         setIsBuffering(false);
-                                        // If video fails to load, try with a different URL format
+                                        console.error('Video playback error:', e);
+                                        // Only try one fallback quality to prevent constant switching
                                         if (videoRef.current && currentVideo.videoUrl.includes('v.redd.it')) {
                                             const videoId = currentVideo.videoUrl.match(/v\.redd\.it\/([^/?]+)/i)?.[1];
-                                            if (videoId) {
-                                                // Try a lower quality first
-                                                videoRef.current.src = `https://v.redd.it/${videoId}/DASH_480.mp4`;
+                                            if (videoId && videoQuality !== '360') {
+                                                // Try 360p as a single fallback
+                                                setVideoQuality('360');
+                                                videoRef.current.src = `https://v.redd.it/${videoId}/DASH_360.mp4`;
                                                 videoRef.current.load();
                                                 videoRef.current.play().catch(err => {
-                                                    // If still failing, try an even lower quality
-                                                    videoRef.current!.src = `https://v.redd.it/${videoId}/DASH_240.mp4`;
-                                                    videoRef.current!.load();
-                                                    videoRef.current!.play().catch(finalErr => console.error('Final playback attempt failed:', finalErr));
+                                                    console.error('Fallback quality also failed:', err);
                                                 });
                                             }
                                         }
@@ -894,7 +844,69 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                         </IconButton>
                                     </Box>
                                     
-                                    <Box sx={{ display: 'flex', alignItems: 'center' }}>                                        
+                                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                        {/* Quality selector */}
+                                        <Box sx={{ position: 'relative' }}>
+                                            <IconButton 
+                                                onClick={(e) => { 
+                                                    e.stopPropagation(); 
+                                                    setShowQualityMenu(!showQualityMenu); 
+                                                }}
+                                                sx={{ 
+                                                    color: 'white', 
+                                                    padding: { xs: '4px', sm: '8px' },
+                                                    '& .MuiSvgIcon-root': {
+                                                        fontSize: { xs: '1.25rem', sm: '1.5rem' }
+                                                    }
+                                                }}
+                                            >
+                                                <SettingsIcon />
+                                            </IconButton>
+                                            {showQualityMenu && (
+                                                <Box
+                                                    sx={{
+                                                        position: 'absolute',
+                                                        bottom: '100%',
+                                                        right: 0,
+                                                        backgroundColor: 'rgba(0,0,0,0.9)',
+                                                        borderRadius: '8px',
+                                                        padding: '8px',
+                                                        minWidth: '120px',
+                                                        zIndex: 1000,
+                                                        border: '1px solid rgba(255,255,255,0.2)'
+                                                    }}
+                                                >
+                                                    <Typography variant="caption" sx={{ color: 'white', display: 'block', mb: 1 }}>
+                                                        Quality
+                                                    </Typography>
+                                                    {['240', '360', '480', '720'].map((quality) => (
+                                                        <Button
+                                                            key={quality}
+                                                            size="small"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setVideoQuality(quality);
+                                                                setShowQualityMenu(false);
+                                                            }}
+                                                            sx={{
+                                                                color: videoQuality === quality ? '#f50057' : 'white',
+                                                                display: 'block',
+                                                                width: '100%',
+                                                                justifyContent: 'flex-start',
+                                                                fontSize: '0.8rem',
+                                                                py: 0.5,
+                                                                '&:hover': {
+                                                                    backgroundColor: 'rgba(255,255,255,0.1)'
+                                                                }
+                                                            }}
+                                                        >
+                                                            {quality}p
+                                                        </Button>
+                                                    ))}
+                                                </Box>
+                                            )}
+                                        </Box>
+                                        
                                         <IconButton 
                                             onClick={(e) => { e.stopPropagation(); handleFullscreen(); }}
                                             sx={{ 

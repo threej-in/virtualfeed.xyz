@@ -44,11 +44,15 @@ interface RedditVideoEmbedProps {
   onClick?: () => void;
 }
 
-// Available video resolutions to try in order (from highest to lowest quality)
-const VIDEO_RESOLUTIONS = ['720', '480', '360', '240', '144', '96'];
+// Available video resolutions to try in order (moderate to low quality)
+// Start with a moderate resolution (480p) instead of highest (720p) to reduce initial load failures
+const VIDEO_RESOLUTIONS = ['480', '360', '240', '144', '96'];
 
-// Hard limit on total video load attempts to prevent infinite loops
-const MAX_TOTAL_ATTEMPTS = 1;
+// Increased attempt limit to allow for more resolution options
+const MAX_TOTAL_ATTEMPTS = 3;
+
+// Delay in ms between resolution switch attempts to avoid rapid switching
+const RESOLUTION_SWITCH_DELAY = 1500;
 
 
 const VideoContainer = styled(Box)(({ theme }) => ({
@@ -253,7 +257,8 @@ const RedditVideoEmbed: React.FC<RedditVideoEmbedProps> = ({
         const [entry] = entries;
         setIsInView(entry.isIntersecting);
       },
-      { rootMargin: '200px', threshold: 0.1 }
+      // Reduced rootMargin to prevent preloading videos that are far from viewport
+      { rootMargin: '50px', threshold: 0.1 }
     );
 
     observerRef.current.observe(containerRef.current);
@@ -377,22 +382,28 @@ const RedditVideoEmbed: React.FC<RedditVideoEmbedProps> = ({
       return;
     }
     
-    // Try the next resolution
+    // Try the next resolution with a delay to avoid aggressive switching
     const nextIndex = currentResolutionIndex + 1;
     
     // Check if we have more resolutions to try
     if (nextIndex < VIDEO_RESOLUTIONS.length) {
-      setCurrentResolutionIndex(nextIndex);
+      // Set loading state during the delay
+      setIsLoading(true);
       
-      // Get fallback URL with the next resolution
-      const fallbackUrl = getFallbackVideoUrl(video.videoUrl);
-      
-      // Only attempt to load if we have a valid source
-      if (fallbackUrl && videoRef.current) {
-        videoRef.current.src = fallbackUrl;
-        videoRef.current.load();
-        return;
-      }
+      // Add a delay before trying the next resolution to avoid aggressive switching
+      setTimeout(() => {
+        setCurrentResolutionIndex(nextIndex);
+        
+        // Get fallback URL with the next resolution
+        const fallbackUrl = getFallbackVideoUrl(video.videoUrl);
+        
+        // Only attempt to load if we have a valid source
+        if (fallbackUrl && videoRef.current) {
+          videoRef.current.src = fallbackUrl;
+          videoRef.current.load();
+        }
+      }, RESOLUTION_SWITCH_DELAY);
+      return;
     } else {
       // No more resolutions to try
       setHasAttemptedAllResolutions(true);
@@ -457,27 +468,33 @@ const RedditVideoEmbed: React.FC<RedditVideoEmbedProps> = ({
     setHasAttemptedAllResolutions(false);
     totalAttemptsRef.current = 0;
     
-    // Get video sources from video data
-    const sources = getVideoSources(video);
-    setVideoSources(sources);
-    
-    // Clean up any existing dash player
-    if (dashPlayerRef.current) {
-      dashPlayerRef.current.destroy();
-      dashPlayerRef.current = null;
-      setDashInitialized(false);
-    }
-    
-    // If we have a DASH URL, load dash.js script
-    if (sources?.dashUrl && typeof window !== 'undefined') {
-      if (window.dashjs) {
-        // If dash.js is already loaded, initialize player
-        dashScriptLoadedRef.current = true;
-        initializeDashPlayer();
-      } else {
-        // Otherwise load dash.js script
-        loadDashScript();
+    // Only load video sources when the video is actually in view
+    if (isInView) {
+      // Get video sources from video data
+      const sources = getVideoSources(video);
+      setVideoSources(sources);
+      
+      // Clean up any existing dash player
+      if (dashPlayerRef.current) {
+        dashPlayerRef.current.destroy();
+        dashPlayerRef.current = null;
+        setDashInitialized(false);
       }
+      
+      // If we have a DASH URL, load dash.js script
+      if (sources?.dashUrl && typeof window !== 'undefined') {
+        if (window.dashjs) {
+          // If dash.js is already loaded, initialize player
+          dashScriptLoadedRef.current = true;
+          initializeDashPlayer();
+        } else {
+          // Otherwise load dash.js script
+          loadDashScript();
+        }
+      }
+    } else {
+      // If not in view, don't load anything yet
+      setIsLoading(false);
     }
     
     // Clean up on unmount
@@ -487,7 +504,7 @@ const RedditVideoEmbed: React.FC<RedditVideoEmbedProps> = ({
         dashPlayerRef.current = null;
       }
     };
-  }, [video.id]); // Only re-run when video ID changes
+  }, [video.id, isInView]); // Re-run when video ID changes or when visibility changes
 
   return (
     <VideoContainer ref={containerRef}>
@@ -501,9 +518,9 @@ const RedditVideoEmbed: React.FC<RedditVideoEmbedProps> = ({
           opacity: isLoading ? 0 : 1,
           transition: 'opacity 0.3s ease-in-out',
         }}
-        preload="auto"
+        preload="none" /* Changed from 'auto' to 'none' to prevent preloading */
         playsInline
-        autoPlay={autoplay}
+        autoPlay={false} /* Disabled autoplay to prevent automatic loading */
         muted={isMuted}
         loop={loop}
         controls={controls}

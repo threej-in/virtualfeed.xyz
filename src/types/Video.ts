@@ -21,6 +21,14 @@ export interface Video {
         upvotes?: number;
         audioUrl?: string; // Added for Reddit videos with separate audio tracks
     };
+    // Trending information (optional)
+    trending?: {
+        period: string;
+        hours: number;
+        score: number;
+        viewsPerHour: number;
+        hoursSincePosted: number;
+    };
     // Reddit-specific media fields
     secure_media?: {
         reddit_video?: {

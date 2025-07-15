@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import Video from '../models/Video';
+import { TrendingService, TRENDING_PERIODS } from '../services/trendingService';
 import axios from 'axios';
 import dotenv from 'dotenv';
 
@@ -17,8 +18,44 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
             sortBy = 'createdAt',
             order = 'desc',
             subreddit,
-            showNsfw = 'false'
+            showNsfw = 'false',
+            trending
         } = req.query;
+
+        // Handle trending filter
+        console.log('Backend: Received trending parameter:', trending);
+        if (trending && typeof trending === 'string') {
+            const trendingPeriod = TRENDING_PERIODS.find(p => p.label === trending);
+            console.log('Backend: Found trending period:', trendingPeriod);
+            if (trendingPeriod) {
+                const pageNum = Number(page);
+                const limitNum = Number(limit);
+                const offset = (pageNum - 1) * limitNum;
+                
+                const result = await TrendingService.getTrendingVideos(
+                    trendingPeriod,
+                    limitNum,
+                    offset,
+                    {
+                        subreddit: subreddit as string,
+                        search: search as string,
+                        showNsfw: showNsfw === 'true'
+                    }
+                );
+                
+                res.json({
+                    videos: result.videos,
+                    total: result.total,
+                    pages: Math.ceil(result.total / limitNum),
+                    currentPage: pageNum,
+                    trending: {
+                        period: trendingPeriod.label,
+                        hours: trendingPeriod.hours
+                    }
+                });
+                return;
+            }
+        }
 
         const pageNum = Number(page);
         const limitNum = Number(limit);

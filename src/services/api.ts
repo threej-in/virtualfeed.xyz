@@ -18,6 +18,7 @@ export interface VideoFilters {
     sortBy?: 'createdAt' | 'views' | 'likes';
     order?: 'asc' | 'desc';
     showNsfw?: boolean;
+    trending?: '24h' | '48h' | '1w';
 }
 
 export const getVideos = async (filters: VideoFilters): Promise<VideoResponse> => {
@@ -28,8 +29,12 @@ export const getVideos = async (filters: VideoFilters): Promise<VideoResponse> =
         }
     });
     
+    console.log('Frontend API: Sending filters:', filters);
+    console.log('Frontend API: URL params:', params.toString());
+    
     try {
         const response = await axios.get(`${API_URL}/videos?${params.toString()}`);
+        console.log('Frontend API: Response received:', response.data);
         return response.data;
     } catch (error) {
         console.error('Error fetching videos:', error);

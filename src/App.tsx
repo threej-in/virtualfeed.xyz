@@ -131,6 +131,7 @@ function App() {
     order: 'desc' as 'asc' | 'desc',
     search: undefined as string | undefined,
     showNsfw: false,
+    trending: undefined as '24h' | '48h' | '1w' | undefined,
   });
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
 
@@ -189,6 +190,7 @@ function App() {
   
   // Combine initial load and filter changes into a single effect with proper deduplication
   useEffect(() => {
+    console.log('App: Filter values changed:', filterValues);
     // Generate a unique request ID based on the current filters
     const requestId = JSON.stringify({
       limit: filterValues.limit,
@@ -196,6 +198,7 @@ function App() {
       order: filterValues.order,
       search: filterValues.search,
       showNsfw: filterValues.showNsfw,
+      trending: filterValues.trending,
       page: 1
     });
     
@@ -224,7 +227,7 @@ function App() {
     loadVideos(true, 1);
     
   }, [filterValues.limit, filterValues.sortBy, filterValues.order, 
-      filterValues.search, filterValues.showNsfw]);
+      filterValues.search, filterValues.showNsfw, filterValues.trending]);
       
   // Keep track of initial render state
   const isInitialRender = useRef(true);
@@ -272,6 +275,11 @@ function App() {
   const handleNsfwChange = (value: boolean) => {
     setFilterValues(prev => ({ ...prev, showNsfw: value }));
   };
+
+  const handleTrendingChange = (period: '24h' | '48h' | '1w' | undefined) => {
+    console.log('App: handleTrendingChange called with:', period);
+    setFilterValues(prev => ({ ...prev, trending: period }));
+  };
   
   // Function to handle tag clicks for filtering videos
   const handleTagClick = (tag: string) => {
@@ -313,6 +321,7 @@ function App() {
                     order: 'desc',
                     search: '',
                     showNsfw: false,
+                    trending: undefined,
                   });
                   // Reset videos array to trigger a fresh load
                   setVideos([]);
@@ -370,9 +379,11 @@ function App() {
                   sortBy={filterValues.sortBy || 'createdAt'}
                   order={filterValues.order || 'desc'}
                   showNsfw={filterValues.showNsfw}
+                  trending={filterValues.trending}
                   onSortByChange={handleSortByChange}
                   onOrderChange={handleOrderChange}
                   onNsfwChange={handleNsfwChange}
+                  onTrendingChange={handleTrendingChange}
                   mobileView={true}
                 />
               </FiltersSection>
@@ -407,6 +418,7 @@ function App() {
                     order: 'desc',
                     search: '',
                     showNsfw: false,
+                    trending: undefined,
                   });
                   // Reset videos array to trigger a fresh load
                   setVideos([]);

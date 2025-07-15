@@ -16,6 +16,7 @@ import {
 } from '@mui/material';
 import { motion, AnimatePresence } from 'framer-motion';
 import FilterListIcon from '@mui/icons-material/FilterList';
+import TrendingButton from '../TrendingButton/TrendingButton';
 import { theme } from '../../theme';
 
 const StyledFormControl = styled(FormControl)(({ theme }) => ({
@@ -87,9 +88,11 @@ interface FiltersProps {
   sortBy: string;
   order: 'asc' | 'desc';
   showNsfw: boolean;
+  trending?: '24h' | '48h' | '1w';
   onSortByChange: (value: string) => void;
   onOrderChange: (value: 'asc' | 'desc') => void;
   onNsfwChange: (value: boolean) => void;
+  onTrendingChange: (period: '24h' | '48h' | '1w' | undefined) => void;
   mobileView?: boolean;
 }
 
@@ -97,9 +100,11 @@ const Filters: React.FC<FiltersProps> = ({
   sortBy,
   order,
   showNsfw,
+  trending,
   onSortByChange,
   onOrderChange,
   onNsfwChange,
+  onTrendingChange,
   mobileView = false,
 }) => {
   const theme = useTheme();
@@ -116,6 +121,12 @@ const Filters: React.FC<FiltersProps> = ({
 
   const renderFilters = () => (
     <FiltersContainer>
+      <TrendingButton
+        currentTrending={trending}
+        onTrendingChange={onTrendingChange}
+        mobileView={mobileView}
+      />
+      
       <StyledFormControl size="small">
         <InputLabel>Sort</InputLabel>
         <Select

@@ -23,10 +23,8 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
         } = req.query;
 
         // Handle trending filter
-        console.log('Backend: Received trending parameter:', trending);
         if (trending && typeof trending === 'string') {
             const trendingPeriod = TRENDING_PERIODS.find(p => p.label === trending);
-            console.log('Backend: Found trending period:', trendingPeriod);
             if (trendingPeriod) {
                 const pageNum = Number(page);
                 const limitNum = Number(limit);
@@ -57,9 +55,33 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
             }
         }
 
+        // If no trending filter is applied, use the new homepage algorithm
         const pageNum = Number(page);
         const limitNum = Number(limit);
         const offset = (pageNum - 1) * limitNum;
+        
+        const result = await TrendingService.getHomepageVideos(
+            limitNum,
+            offset,
+            {
+                subreddit: subreddit as string,
+                search: search as string,
+                showNsfw: showNsfw === 'true'
+            }
+        );
+        
+        res.json({
+            videos: result.videos,
+            total: result.total,
+            pages: Math.ceil(result.total / limitNum),
+            currentPage: pageNum,
+            trending: {
+                period: 'homepage',
+                hours: 0,
+                isHomepage: true
+            }
+        });
+        return;
         
         // Use the sequelize instance directly from the database config
         const db = require('../config/database').default;

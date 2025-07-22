@@ -90,7 +90,63 @@ export class TrendingService {
       const total = countResult[0].count;
       
       if (total === 0) {
-        return { videos: [], total: 0 };
+        // If no videos found in the specified period, try to get recent videos instead
+        logger.info(`No videos found for trending period ${period.label}, falling back to recent videos`);
+        
+        // Remove the time filter and get recent videos
+        const fallbackWhereConditions = whereConditions.filter((_, index) => {
+          // Remove the createdAt filter (first condition)
+          return index !== 0;
+        });
+        const fallbackQueryParams = queryParams.slice(1); // Remove the cutoff date
+        
+        const fallbackWhereClause = fallbackWhereConditions.length > 0 
+          ? `WHERE ${fallbackWhereConditions.join(' AND ')}` 
+          : '';
+        
+        const fallbackCountQuery = `SELECT COUNT(*) as count FROM videos ${fallbackWhereClause}`;
+        const [fallbackCountResult] = await db.query(fallbackCountQuery, { replacements: fallbackQueryParams });
+        const fallbackTotal = fallbackCountResult[0].count;
+        
+        if (fallbackTotal === 0) {
+          return { videos: [], total: 0 };
+        }
+        
+        // Get recent videos instead
+        const fallbackVideosQuery = `
+          SELECT 
+            *,
+            TIMESTAMPDIFF(HOUR, createdAt, NOW()) as hours_since_posted,
+            views as total_views
+          FROM videos 
+          ${fallbackWhereClause} 
+          ORDER BY createdAt DESC
+          LIMIT ${limit} OFFSET ${offset}
+        `;
+        
+        const [fallbackVideos] = await db.query(fallbackVideosQuery, { replacements: fallbackQueryParams });
+        
+        const transformedFallbackVideos = fallbackVideos.map((video: any) => {
+          const hoursSincePosted = video.hours_since_posted || 1;
+          const trendingScore = this.calculateTrendingScore(video.total_views, hoursSincePosted);
+          
+          return {
+            ...video,
+            trending: {
+              period: 'recent', // Indicate this is a fallback
+              hours: period.hours,
+              score: Math.round(trendingScore * 100) / 100,
+              viewsPerHour: Math.round((video.total_views / hoursSincePosted) * 100) / 100,
+              hoursSincePosted: Math.round(hoursSincePosted * 100) / 100,
+              isFallback: true
+            }
+          };
+        });
+        
+        return {
+          videos: transformedFallbackVideos,
+          total: fallbackTotal
+        };
       }
       
       // Get videos with trending score calculation
@@ -119,7 +175,8 @@ export class TrendingService {
             hours: period.hours,
             score: Math.round(trendingScore * 100) / 100,
             viewsPerHour: Math.round((video.total_views / hoursSincePosted) * 100) / 100,
-            hoursSincePosted: Math.round(hoursSincePosted * 100) / 100
+            hoursSincePosted: Math.round(hoursSincePosted * 100) / 100,
+            isFallback: false
           }
         };
       });
@@ -185,6 +242,123 @@ export class TrendingService {
       
     } catch (error) {
       logger.error(`Error getting trending stats for video ${videoId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get homepage videos with mixed trending algorithm optimized for infinite scrolling
+   * Prioritizes trending content but provides continuous stream for infinite scrolling
+   * @param limit Total number of videos to return
+   * @param offset Pagination offset
+   * @param filters Additional filters
+   * @returns Array of mixed trending videos
+   */
+  public static async getHomepageVideos(
+    limit: number = 12,
+    offset: number = 0,
+    filters: {
+      subreddit?: string;
+      search?: string;
+      showNsfw?: boolean;
+    } = {}
+  ): Promise<{ videos: any[]; total: number }> {
+    try {
+      const db = require('../config/database').default;
+
+      // Build base WHERE conditions
+      const baseWhereConditions: any[] = [];
+      const baseQueryParams: any[] = [];
+      
+      // Add subreddit filter
+      if (filters.subreddit) {
+        baseWhereConditions.push('subreddit = ?');
+        baseQueryParams.push(filters.subreddit);
+      }
+      
+      // Add search filter
+      if (filters.search) {
+        baseWhereConditions.push('(title LIKE ? OR description LIKE ?)');
+        baseQueryParams.push(`%${filters.search}%`, `%${filters.search}%`);
+      }
+      
+      // Add NSFW filter
+      if (!filters.showNsfw) {
+        baseWhereConditions.push('(nsfw = 0 OR nsfw IS NULL)');
+      }
+      
+      // Always exclude blacklisted videos
+      baseWhereConditions.push('(blacklisted = 0 OR blacklisted IS NULL)');
+      
+      const baseWhereClause = baseWhereConditions.length > 0 
+        ? `WHERE ${baseWhereConditions.join(' AND ')}` 
+        : '';
+
+      // Get total count for pagination
+      const countQuery = `SELECT COUNT(*) as count FROM videos ${baseWhereClause}`;
+      const [countResult] = await db.query(countQuery, { replacements: baseQueryParams });
+      const total = countResult[0].count;
+
+      // For infinite scrolling, we need a continuous stream of videos
+      // Use a weighted scoring system that prioritizes trending content but includes all videos
+      const videosQuery = `
+        SELECT 
+          *,
+          TIMESTAMPDIFF(HOUR, createdAt, NOW()) as hours_since_posted,
+          views as total_views,
+          CASE 
+            WHEN createdAt >= DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN 4  -- 24h videos get highest priority
+            WHEN createdAt >= DATE_SUB(NOW(), INTERVAL 48 HOUR) THEN 3  -- 48h videos get high priority
+            WHEN createdAt >= DATE_SUB(NOW(), INTERVAL 168 HOUR) THEN 2 -- 1w videos get medium priority
+            ELSE 1  -- Older videos get base priority
+          END as time_priority
+        FROM videos 
+        ${baseWhereClause}
+        ORDER BY 
+          time_priority DESC,  -- First by time priority
+          views DESC,          -- Then by views within each time period
+          createdAt DESC       -- Finally by creation date
+        LIMIT ${limit} OFFSET ${offset}
+      `;
+      
+      const [videos] = await db.query(videosQuery, { replacements: baseQueryParams });
+      
+      // Calculate trending scores and transform results
+      const transformedVideos = videos.map((video: any) => {
+        const hoursSincePosted = video.hours_since_posted || 1;
+        const trendingScore = this.calculateTrendingScore(video.total_views, hoursSincePosted);
+        
+        // Determine the period based on hours since posted
+        let period = 'all';
+        if (hoursSincePosted <= 24) {
+          period = '24h';
+        } else if (hoursSincePosted <= 48) {
+          period = '48h';
+        } else if (hoursSincePosted <= 168) {
+          period = '1w';
+        }
+        
+        return {
+          ...video,
+          trending: {
+            period,
+            hours: hoursSincePosted,
+            score: Math.round(trendingScore * 100) / 100,
+            viewsPerHour: Math.round((video.total_views / hoursSincePosted) * 100) / 100,
+            hoursSincePosted: Math.round(hoursSincePosted * 100) / 100,
+            isFallback: false,
+            timePriority: video.time_priority
+          }
+        };
+      });
+
+      return {
+        videos: transformedVideos,
+        total
+      };
+
+    } catch (error) {
+      logger.error('Error getting homepage videos:', error);
       throw error;
     }
   }

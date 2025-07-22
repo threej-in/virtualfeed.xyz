@@ -9,6 +9,10 @@ export interface VideoResponse {
     total: number;
     pages: number;
     currentPage: number;
+    trending?: {
+        period: string;
+        hours: number;
+    };
 }
 
 export interface VideoFilters {
@@ -29,12 +33,8 @@ export const getVideos = async (filters: VideoFilters): Promise<VideoResponse> =
         }
     });
     
-    console.log('Frontend API: Sending filters:', filters);
-    console.log('Frontend API: URL params:', params.toString());
-    
     try {
         const response = await axios.get(`${API_URL}/videos?${params.toString()}`);
-        console.log('Frontend API: Response received:', response.data);
         return response.data;
     } catch (error) {
         console.error('Error fetching videos:', error);
@@ -70,4 +70,26 @@ export const fetchRedditUpvotes = async (videoId: string): Promise<number> => {
         console.error(`Error fetching Reddit upvotes for video ${videoId}:`, error);
         throw error;
     }
+};
+
+export const submitVideo = async (redditUrl: string, isNsfw: boolean = false): Promise<void> => {
+  try {
+    const response = await fetch(`${API_URL}/videos/submit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ redditUrl, isNsfw }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to submit video');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error submitting video:', error);
+    throw error;
+  }
 };

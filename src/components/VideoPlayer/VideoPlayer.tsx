@@ -8,28 +8,22 @@ import {
     Chip,
     Stack,
     Fade,
-    useMediaQuery,
     useTheme
 } from '@mui/material';
 import { 
     Close as CloseIcon, 
-    ThumbUp as ThumbUpIcon,
     PlayArrow as PlayIcon,
     Pause as PauseIcon,
-    VolumeUp as VolumeIcon,
-    VolumeOff as MuteIcon,
     Fullscreen as FullscreenIcon,
     KeyboardArrowLeft as ArrowLeftIcon,
     KeyboardArrowRight as ArrowRightIcon,
-    Share as ShareIcon,
     Visibility as VisibilityIcon,
-    VisibilityOff as VisibilityOffIcon,
     Favorite as FavoriteIcon,
     ArrowUpward as ArrowUpwardIcon,
-    Link as LinkIcon,
     Loop as LoopIcon,
     Reddit as RedditIcon,
-    Settings as SettingsIcon
+    Settings as SettingsIcon,
+    Download as DownloadIcon
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSwipeable } from 'react-swipeable';
@@ -46,13 +40,13 @@ interface VideoPlayerProps {
 
 const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, open, onClose, onTagClick }) => {
     const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-    const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
+    // const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+    // const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
     
     const [currentIndex, setCurrentIndex] = useState(initialVideoIndex);
     const [isPlaying, setIsPlaying] = useState(false);
     // Always mute videos - audio playback removed as requested
-    const [isMuted, setIsMuted] = useState(true);
+    const [isMuted] = useState(true);
     const [isLooping, setIsLooping] = useState(true);
     const [progress, setProgress] = useState(0);
     const [currentTime, setCurrentTime] = useState(0);
@@ -62,19 +56,18 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
     const [videoQuality, setVideoQuality] = useState<string>('480'); // Default to 480p for stability
     const [isBuffering, setIsBuffering] = useState(false);
     const [showQualityMenu, setShowQualityMenu] = useState(false);
-    const [isInitialLoading, setIsInitialLoading] = useState(true);
-    const [networkSpeed, setNetworkSpeed] = useState<number | null>(null); // Kept for compatibility
+    // const [isInitialLoading, setIsInitialLoading] = useState(true);
+    // const [networkSpeed, setNetworkSpeed] = useState<number | null>(null); // Kept for compatibility
     
     const videoRef = useRef<HTMLVideoElement>(null);
     const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const loadStartTimeRef = useRef<number>(0);
-    const nextVideoRef = useRef<HTMLVideoElement | null>(null);
+    // const nextVideoRef = useRef<HTMLVideoElement | null>(null);
     
     // Update currentIndex when initialVideoIndex changes
     useEffect(() => {
         if (initialVideoIndex >= 0 && initialVideoIndex < videos.length) {
             setCurrentIndex(initialVideoIndex);
-            console.log('Video player updated to index:', initialVideoIndex);
         }
     }, [initialVideoIndex, videos]);
     
@@ -89,7 +82,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
     // Measure network speed when loading video (simplified)
     const measureNetworkSpeed = useCallback(() => {
         // Simplified network speed measurement to avoid quality switching
-        console.log('Video loaded successfully');
     }, []);
 
         // Get appropriate video quality based on network conditions
@@ -132,19 +124,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         return;
     }, []);
     
-
-    // Create a fallback thumbnail with the video title
-    const createFallbackThumbnail = useCallback((title: string) => {
-        const shortenedTitle = title.substring(0, 30) + (title.length > 30 ? '...' : '');
-        // Create a data URL for an SVG with the title text
-        const svgContent = `
-            <svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
-                <rect width="100%" height="100%" fill="#121212"/>
-                <text x="50%" y="50%" font-family="Arial, sans-serif" font-size="24" fill="#ffffff" text-anchor="middle" dominant-baseline="middle">${shortenedTitle.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')}</text>
-            </svg>
-        `;
-        return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgContent.trim())}`;
-    }, []);
     
     useEffect(() => {
         // Reset state when changing videos
@@ -153,7 +132,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         setDuration(0);
         setIsPlaying(false);
         setIsBuffering(true);
-        setIsInitialLoading(true); // Set initial loading to true when changing videos
+        // setIsInitialLoading(true); // Set initial loading to true when changing videos
         
         // Record start time for network speed measurement
         loadStartTimeRef.current = performance.now();
@@ -173,7 +152,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                 videoRef.current.oncanplay = () => {
                     console.log('Video can play now');
                     setIsBuffering(false);
-                    setIsInitialLoading(false); // Mark initial loading as complete once video can play
+                    // setIsInitialLoading(false); // Mark initial loading as complete once video can play
                     measureNetworkSpeed();
                     
                     // Preloading next video is disabled to reduce network usage
@@ -269,7 +248,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         }
     };
 
-    const togglePlay = () => {
+    const togglePlay = useCallback(() => {
         if (videoRef.current) {
             if (isPlaying) {
                 videoRef.current.pause();
@@ -311,21 +290,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                 }
             }
         }
-    };
-
-    const toggleMute = () => {
-        setIsMuted(!isMuted);
-        if (videoRef.current) {
-            videoRef.current.muted = !isMuted;
-        }
-    };
-    
-    const toggleLoop = () => {
-        setIsLooping(!isLooping);
-        if (videoRef.current) {
-            videoRef.current.loop = !isLooping;
-        }
-    };
+    }, [isPlaying]);
     
     // Format time for display (e.g., 1:23)
     const formatTime = (seconds: number) => {
@@ -361,6 +326,27 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         }
     };
 
+    const handleDownload = () => {
+        if (currentVideo) {
+            try {
+                // Create a temporary anchor element
+                const link = document.createElement('a');
+                link.href = getVideoUrl(currentVideo.videoUrl);
+                link.download = `${currentVideo.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mp4`;
+                link.target = '_blank';
+                
+                // Append to body, click, and remove
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            } catch (error) {
+                console.error('Error downloading video:', error);
+                // Fallback: open in new tab
+                window.open(getVideoUrl(currentVideo.videoUrl), '_blank');
+            }
+        }
+    };
+
     const goToNextVideo = useCallback(() => {
         if (currentIndex < videos.length - 1) {
             // Reset video timer and state
@@ -389,9 +375,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
     const [swipeDirection, setSwipeDirection] = useState<string | null>(null);
     const [swipeProgress, setSwipeProgress] = useState(0);
     
-    // Track thumbnail state
-    const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
-    const [thumbnailError, setThumbnailError] = useState(false);
     
     // Loading spinner SVG for buffering indicator
     const loadingSpinnerSvg = `
@@ -908,6 +891,20 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                         </Box>
                                         
                                         <IconButton 
+                                            onClick={(e) => { e.stopPropagation(); handleDownload(); }}
+                                            sx={{ 
+                                                color: 'white', 
+                                                padding: { xs: '4px', sm: '8px' },
+                                                '& .MuiSvgIcon-root': {
+                                                    fontSize: { xs: '1.25rem', sm: '1.5rem' }
+                                                }
+                                            }}
+                                            title="Download video"
+                                        >
+                                            <DownloadIcon />
+                                        </IconButton>
+                                        
+                                        <IconButton 
                                             onClick={(e) => { e.stopPropagation(); handleFullscreen(); }}
                                             sx={{ 
                                                 color: 'white', 
@@ -1168,6 +1165,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                             >
                                 {window.innerWidth < 500 ? 'Reddit' : 'View on Reddit'}
                             </Button>
+                            
+
                         </Box>
                         
                         <Box 

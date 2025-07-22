@@ -6,8 +6,6 @@ import {
   MenuItem,
   Typography,
   styled,
-  useMediaQuery,
-  useTheme,
   Tooltip,
 } from '@mui/material';
 import { TrendingUp as TrendingIcon } from '@mui/icons-material';
@@ -87,19 +85,18 @@ interface TrendingButtonProps {
   currentTrending?: '24h' | '48h' | '1w';
   onTrendingChange: (period: '24h' | '48h' | '1w' | undefined) => void;
   mobileView?: boolean;
+  isFallback?: boolean; // Add fallback indicator
 }
 
 const TrendingButton: React.FC<TrendingButtonProps> = ({
   currentTrending,
   onTrendingChange,
   mobileView = false,
+  isFallback = false,
 }) => {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
-    console.log('Trending button clicked!');
     setAnchorEl(event.currentTarget);
   };
 
@@ -108,13 +105,10 @@ const TrendingButton: React.FC<TrendingButtonProps> = ({
   };
 
   const handleTrendingSelect = (period: '24h' | '48h' | '1w') => {
-    console.log('Trending period selected:', period);
     // If the same period is selected, clear the trending filter
     if (currentTrending === period) {
-      console.log('Clearing trending filter');
       onTrendingChange(undefined);
     } else {
-      console.log('Setting trending filter to:', period);
       onTrendingChange(period);
     }
     handleClose();
@@ -130,11 +124,15 @@ const TrendingButton: React.FC<TrendingButtonProps> = ({
   };
 
   const isActive = !!currentTrending;
+  const buttonText = isFallback ? 'Recent' : 'Trending';
+  const tooltipText = isFallback 
+    ? `Showing recent videos (no trending content available for ${getTrendingLabel(currentTrending || '24h')})`
+    : currentTrending ? `Trending: ${getTrendingLabel(currentTrending)}` : 'Show trending videos';
 
   return (
     <Box>
       <Tooltip 
-        title={currentTrending ? `Trending: ${getTrendingLabel(currentTrending)}` : 'Show trending videos'}
+        title={tooltipText}
         placement="bottom"
       >
         <StyledIconButton
@@ -154,7 +152,7 @@ const TrendingButton: React.FC<TrendingButtonProps> = ({
             transition={{ duration: 0.3 }}
             style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
           >
-            <span style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>Trending</span>
+            <span style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>{buttonText}</span>
             <TrendingIcon />
           </motion.div>
         </StyledIconButton>
@@ -174,6 +172,30 @@ const TrendingButton: React.FC<TrendingButtonProps> = ({
         }}
         PaperProps={{
           elevation: 0,
+        }}
+        // Prevent menu from repositioning unexpectedly
+        keepMounted
+        disablePortal={false}
+        // Better positioning control
+        slotProps={{
+          paper: {
+            sx: {
+              maxHeight: '300px',
+              overflow: 'auto',
+            }
+          }
+        }}
+        MenuListProps={{
+          sx: {
+            padding: '8px 0',
+          }
+        }}
+        // Prevent the menu from being cut off by viewport
+        sx={{
+          '& .MuiPaper-root': {
+            maxHeight: '300px',
+            overflow: 'visible',
+          }
         }}
       >
         <StyledMenuItem
@@ -208,7 +230,10 @@ const TrendingButton: React.FC<TrendingButtonProps> = ({
         
         {currentTrending && (
           <StyledMenuItem
-            onClick={() => onTrendingChange(undefined)}
+            onClick={() => {
+              onTrendingChange(undefined);
+              handleClose();
+            }}
             sx={{
               borderTop: '1px solid rgba(108, 99, 255, 0.1)',
               marginTop: 0.5,

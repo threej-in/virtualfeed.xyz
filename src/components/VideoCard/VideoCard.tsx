@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Card, CardContent, CardMedia, Typography, CardActionArea, Box, Stack, Chip, Skeleton, styled } from '@mui/material';
+import { Card, CardContent, Typography, CardActionArea, Box, Skeleton, styled } from '@mui/material';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import ThumbUpIcon from '@mui/icons-material/ThumbUp';
 import MovieIcon from '@mui/icons-material/Movie';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import { Video } from '../../types/Video';
-import RedditVideoEmbed from './RedditVideoEmbed';
 
 interface VideoCardProps {
     video: Video;
@@ -75,7 +74,6 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick }) => {
     const maxRetries = 3;
     const imageRef = useRef<HTMLImageElement>(null);
     const cardRef = useRef<HTMLDivElement>(null);
-    // Initialize with null to fix the TypeScript error
     const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     
     // Create a fallback thumbnail with the video title
@@ -167,7 +165,6 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick }) => {
                             setImageLoading(false);
                         };
                         img.onerror = (e) => {
-                            console.error(`Local thumbnail failed to load: ${thumbnailUrl}`, e);
                             // Try one more time with apiBaseUrl prefix
                             const fallbackUrl = `${apiBaseUrl}${thumbnailPath}`;
                             
@@ -254,55 +251,46 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick }) => {
     return (
         <StyledCard ref={cardRef} title={video.id + ""}>
             <CardActionArea onClick={onClick} sx={{ position: 'relative' }}>
-                {imageLoading && (
-                    <Box 
-                        sx={{ 
-                            position: 'relative',
-                            paddingTop: '56.25%', // 16:9 aspect ratio
-                            overflow: 'hidden',
-                            '@media (min-width: 960px)': {
-                                paddingTop: '62%' // Match the actual thumbnail aspect ratio on desktop
-                            },
-                        }}
-                    >
-                        <Skeleton 
-                            variant="rectangular" 
-                            animation="wave"
-                            sx={{ 
+                {/* Single container for both skeleton and image to ensure consistent sizing */}
+                <Box sx={{
+                    position: 'relative',
+                    paddingTop: '56.25%', // 16:9 aspect ratio - consistent for both skeleton and image
+                    overflow: 'hidden',
+                }}>
+                    {/* Skeleton overlay */}
+                    {imageLoading && (
+                        <>
+                            <Skeleton 
+                                variant="rectangular" 
+                                animation="wave"
+                                sx={{ 
+                                    position: 'absolute',
+                                    top: 0,
+                                    left: 0,
+                                    width: '100%',
+                                    height: '100%',
+                                    bgcolor: 'grey.800',
+                                }}
+                            />
+                            <Box sx={{
                                 position: 'absolute',
                                 top: 0,
                                 left: 0,
                                 width: '100%',
                                 height: '100%',
-                                bgcolor: 'grey.800',
-                            }}
-                        />
-                        <Box sx={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '100%',
-                            height: '100%',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
-                        }}>
-                            <MovieIcon sx={{ 
-                                fontSize: { xs: 32, sm: 40 }, 
-                                opacity: 0.7 
-                            }} />
-                        </Box>
-                    </Box>
-                )}
-                <Box sx={{
-                    position: 'relative',
-                    paddingTop: '56.25%', // 16:9 aspect ratio
-                    overflow: 'hidden',
-                    '@media (min-width: 960px)': {
-                        paddingTop: '62%' // Slightly taller on desktop for better visibility
-                    },
-                }}>
-                    {/* Use a regular img element instead of CardMedia for better control */}
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                            }}>
+                                <MovieIcon sx={{ 
+                                    fontSize: { xs: 32, sm: 40 }, 
+                                    opacity: 0.7 
+                                }} />
+                            </Box>
+                        </>
+                    )}
+                    
+                    {/* Actual image */}
                     <img
                         src={thumbnailUrl}
                         alt={video.title}
@@ -361,7 +349,8 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick }) => {
                             </Typography>
                         </Box>
                         
-                        {/* Upvotes count */}
+                        {/* Platform-specific engagement metrics */}
+                        {/* Reddit upvotes */}
                         <Box sx={{ display: 'flex', alignItems: 'center' }}>
                             <ThumbUpIcon sx={{ 
                                 fontSize: { xs: 14, sm: 16 }, 
@@ -382,26 +371,25 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick }) => {
                         </Box>
                     </Box>
                     
-                    {video.redditId && (
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            <ArrowUpwardIcon sx={{ 
-                                fontSize: { xs: 14, sm: 16 }, 
+                    {/* Platform indicator */}
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <ArrowUpwardIcon sx={{ 
+                            fontSize: { xs: 14, sm: 16 }, 
+                            color: 'white',
+                            mr: 0.5,
+                            opacity: 0.9
+                        }} />
+                        <Typography 
+                            variant="caption" 
+                            sx={{ 
+                                fontSize: { xs: '0.7rem', sm: '0.75rem' },
                                 color: 'white',
-                                mr: 0.5,
-                                opacity: 0.9
-                            }} />
-                            <Typography 
-                                variant="caption" 
-                                sx={{ 
-                                    fontSize: { xs: '0.7rem', sm: '0.75rem' },
-                                    color: 'white',
-                                    fontWeight: 500
-                                }}
-                            >
-                                r/{video.subreddit}
-                            </Typography>
-                        </Box>
-                    )}
+                                fontWeight: 500
+                            }}
+                        >
+                            r/{video.subreddit}
+                        </Typography>
+                    </Box>
                 </ThumbnailOverlay>
             </CardActionArea>
             

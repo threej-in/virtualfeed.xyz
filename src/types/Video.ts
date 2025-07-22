@@ -28,6 +28,7 @@ export interface Video {
         score: number;
         viewsPerHour: number;
         hoursSincePosted: number;
+        isFallback?: boolean;
     };
     // Reddit-specific media fields
     secure_media?: {

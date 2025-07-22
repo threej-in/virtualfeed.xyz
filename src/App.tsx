@@ -10,16 +10,19 @@ import {
   Alert,
   Snackbar,
   Button,
+  Fab,
 } from '@mui/material';
 import { motion, AnimatePresence } from 'framer-motion';
 import VideoGrid from './components/VideoGrid/VideoGrid';
 import SearchBar from './components/SearchBar/SearchBar';
 import Filters from './components/Filters/Filters';
 import VideoPlayer from './components/VideoPlayer/VideoPlayer';
+import VideoSubmission from './components/VideoSubmission/VideoSubmission';
 import Background from './components/Background/Background';
 import { Video } from './types/Video';
-import { getVideos, VideoFilters } from './services/api';
+import { getVideos, submitVideo } from './services/api';
 import { theme } from './theme';
+import AddIcon from '@mui/icons-material/Add';
 
 const StyledContainer = styled(Container)(({ theme }) => ({
   position: 'relative',
@@ -131,9 +134,11 @@ function App() {
     order: 'desc' as 'asc' | 'desc',
     search: undefined as string | undefined,
     showNsfw: false,
-    trending: undefined as '24h' | '48h' | '1w' | undefined,
+    trending: undefined as '24h' | '48h' | '1w' | undefined, // No trending filter by default - use homepage algorithm
   });
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+  const [isFallbackContent, setIsFallbackContent] = useState(false);
+  const [isVideoSubmissionOpen, setIsVideoSubmissionOpen] = useState(false);
 
   // Observer for infinite scrolling
   const observer = useRef<IntersectionObserver | null>(null);
@@ -156,6 +161,11 @@ function App() {
       };
       
       const response = await getVideos(currentFilters);
+      
+      // Check if this is fallback content (recent videos instead of trending)
+      const isFallback = response.trending?.period === 'recent' || 
+                        (response.videos.length > 0 && response.videos[0].trending?.isFallback);
+      setIsFallbackContent(isFallback || false);
       
       if (page === 1) {
         // First page load - replace videos
@@ -190,7 +200,6 @@ function App() {
   
   // Combine initial load and filter changes into a single effect with proper deduplication
   useEffect(() => {
-    console.log('App: Filter values changed:', filterValues);
     // Generate a unique request ID based on the current filters
     const requestId = JSON.stringify({
       limit: filterValues.limit,
@@ -227,7 +236,7 @@ function App() {
     loadVideos(true, 1);
     
   }, [filterValues.limit, filterValues.sortBy, filterValues.order, 
-      filterValues.search, filterValues.showNsfw, filterValues.trending]);
+      filterValues.search, filterValues.showNsfw, filterValues.trending, loadVideos]);
       
   // Keep track of initial render state
   const isInitialRender = useRef(true);
@@ -277,7 +286,6 @@ function App() {
   };
 
   const handleTrendingChange = (period: '24h' | '48h' | '1w' | undefined) => {
-    console.log('App: handleTrendingChange called with:', period);
     setFilterValues(prev => ({ ...prev, trending: period }));
   };
   
@@ -289,6 +297,19 @@ function App() {
 
   const handleCloseError = () => {
     setShowError(false);
+  };
+
+  const handleSubmitVideo = async (redditUrl: string, isNsfw: boolean) => {
+    try {
+      await submitVideo(redditUrl, isNsfw);
+      setIsVideoSubmissionOpen(false);
+      // Don't reload videos immediately - let user continue browsing
+      // The video will appear in the next natural refresh
+    } catch (error) {
+      console.error('Error submitting video:', error);
+      // Error is handled by the VideoSubmission component
+      throw error; // Re-throw to let VideoSubmission handle it
+    }
   };
 
   return (
@@ -321,7 +342,7 @@ function App() {
                     order: 'desc',
                     search: '',
                     showNsfw: false,
-                    trending: undefined,
+                    trending: undefined, // Use homepage algorithm by default
                   });
                   // Reset videos array to trigger a fresh load
                   setVideos([]);
@@ -385,6 +406,7 @@ function App() {
                   onNsfwChange={handleNsfwChange}
                   onTrendingChange={handleTrendingChange}
                   mobileView={true}
+                  isFallback={isFallbackContent}
                 />
               </FiltersSection>
             </Box>
@@ -418,7 +440,7 @@ function App() {
                     order: 'desc',
                     search: '',
                     showNsfw: false,
-                    trending: undefined,
+                    trending: undefined, // Use homepage algorithm by default
                   });
                   // Reset videos array to trigger a fresh load
                   setVideos([]);
@@ -467,6 +489,28 @@ function App() {
           onClose={() => setSelectedVideo(null)}
           onTagClick={handleTagClick}
         />
+
+        {/* Video Submission Modal */}
+        <VideoSubmission
+          open={isVideoSubmissionOpen}
+          onClose={() => setIsVideoSubmissionOpen(false)}
+          onSubmit={handleSubmitVideo}
+        />
+
+        {/* Floating Action Button */}
+        <Fab
+          color="primary"
+          aria-label="add"
+          onClick={() => setIsVideoSubmissionOpen(true)}
+          sx={{
+            position: 'fixed',
+            bottom: theme.spacing(2),
+            right: theme.spacing(2),
+            zIndex: 1000,
+          }}
+        >
+          <AddIcon />
+        </Fab>
       </StyledContainer>
     </ThemeProvider>
   );

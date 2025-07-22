@@ -12,8 +12,13 @@ async function main() {
         await sequelize.sync();
         logger.info('Database models synchronized.');
 
-        // Start scraping
+        // Start Reddit scraping
+        logger.info('Starting Reddit scraping...');
         await RedditScraper.scrapeSubreddits();
+        logger.info('Reddit scraping completed.');
+
+        logger.info('Total scraping completed. Processed videos from Reddit.');
+
     } catch (error) {
         logger.error('Error in scrape script:', error);
         process.exit(1);

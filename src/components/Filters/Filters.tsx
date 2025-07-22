@@ -13,11 +13,14 @@ import {
   useMediaQuery,
   useTheme,
   Popover,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
 } from '@mui/material';
-import { motion, AnimatePresence } from 'framer-motion';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import TrendingButton from '../TrendingButton/TrendingButton';
-import { theme } from '../../theme';
 
 const StyledFormControl = styled(FormControl)(({ theme }) => ({
   background: 'rgba(19, 19, 47, 0.6)',
@@ -94,6 +97,7 @@ interface FiltersProps {
   onNsfwChange: (value: boolean) => void;
   onTrendingChange: (period: '24h' | '48h' | '1w' | undefined) => void;
   mobileView?: boolean;
+  isFallback?: boolean; // Add fallback indicator
 }
 
 const Filters: React.FC<FiltersProps> = ({
@@ -106,10 +110,13 @@ const Filters: React.FC<FiltersProps> = ({
   onNsfwChange,
   onTrendingChange,
   mobileView = false,
+  isFallback = false,
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
+  const [showNsfwDialog, setShowNsfwDialog] = useState(false);
+  const [pendingNsfwChange, setPendingNsfwChange] = useState<boolean | null>(null);
   
   const handleFilterClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     setAnchorEl(event.currentTarget);
@@ -119,12 +126,31 @@ const Filters: React.FC<FiltersProps> = ({
     setAnchorEl(null);
   };
 
+  const handleNsfwToggle = (newValue: boolean) => {
+    setPendingNsfwChange(newValue);
+    setShowNsfwDialog(true);
+  };
+
+  const confirmNsfwChange = () => {
+    if (pendingNsfwChange !== null) {
+      onNsfwChange(pendingNsfwChange);
+      setPendingNsfwChange(null);
+    }
+    setShowNsfwDialog(false);
+  };
+
+  const cancelNsfwChange = () => {
+    setPendingNsfwChange(null);
+    setShowNsfwDialog(false);
+  };
+
   const renderFilters = () => (
     <FiltersContainer>
       <TrendingButton
         currentTrending={trending}
         onTrendingChange={onTrendingChange}
         mobileView={mobileView}
+        isFallback={isFallback}
       />
       
       <StyledFormControl size="small">
@@ -161,7 +187,7 @@ const Filters: React.FC<FiltersProps> = ({
         control={
           <Switch
             checked={showNsfw}
-            onChange={(e) => onNsfwChange(e.target.checked)}
+            onChange={(e) => handleNsfwToggle(e.target.checked)}
             size="small"
             sx={{
               '& .MuiSwitch-switchBase.Mui-checked': {
@@ -254,7 +280,72 @@ const Filters: React.FC<FiltersProps> = ({
   }
 
   // For desktop view
-  return renderFilters();
+  return (
+    <>
+      {renderFilters()}
+      
+      {/* NSFW Confirmation Dialog */}
+      <Dialog
+        open={showNsfwDialog}
+        onClose={cancelNsfwChange}
+        PaperProps={{
+          sx: {
+            backgroundColor: 'rgba(19, 19, 47, 0.95)',
+            backdropFilter: 'blur(12px)',
+            border: '1px solid rgba(108, 99, 255, 0.15)',
+            borderRadius: '16px',
+            color: '#fff',
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          color: '#ff6584', 
+          fontWeight: 600,
+          borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
+        }}>
+          Age Verification Required
+        </DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)', mb: 2 }}>
+            {pendingNsfwChange 
+              ? 'You are about to enable NSFW (Not Safe For Work) content. This may include explicit or adult material.'
+              : 'You are about to disable NSFW content.'
+            }
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.9)', fontWeight: 500 }}>
+            Are you 18 years or older?
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, gap: 1 }}>
+          <Button 
+            onClick={cancelNsfwChange}
+            variant="outlined"
+            sx={{ 
+              borderColor: 'rgba(255, 255, 255, 0.3)',
+              color: '#fff',
+              '&:hover': {
+                borderColor: 'rgba(255, 255, 255, 0.5)',
+              }
+            }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={confirmNsfwChange}
+            variant="contained"
+            sx={{ 
+              backgroundColor: '#ff6584',
+              '&:hover': {
+                backgroundColor: '#e55a75',
+              }
+            }}
+          >
+            Yes, I'm 18+
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
 };
 
 export default Filters;

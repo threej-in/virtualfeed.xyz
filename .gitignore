@@ -6,6 +6,8 @@
 /backend/node_modules
 /backend/public/thumbnails
 /backend/logs
+/backend/public
+/backend/dist
 /.pnp
 .pnp.js
 

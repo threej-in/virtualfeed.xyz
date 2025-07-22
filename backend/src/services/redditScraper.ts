@@ -30,8 +30,8 @@ export class RedditScraper {
                 const postText = `${post.title} ${post.selftext || ''} ${post.link_flair_text || ''}`.toLowerCase();
                 
                 // STRICT FILTERING: Require at least one primary AI term AND one secondary term
-                const primaryAITerms = ['ai', 'artificial intelligence', 'generated', 'stable diffusion', 'midjourney', 'dall-e', 'sora'];
-                const secondaryTerms = ['video', 'created', 'made', 'produced', 'animation', 'render', 'generated'];
+                const primaryAITerms = ['ai', 'artificial intelligence', 'generated', 'stable diffusion', 'midjourney', 'dall-e', 'sora', 'gpt', 'chatgpt', 'machine learning', 'neural network', 'deep learning', 'algorithm', 'automated', 'synthetic'];
+                const secondaryTerms = ['video', 'created', 'made', 'produced', 'animation', 'render', 'generated', 'using', 'with', 'by', 'through'];
                 
                 // Check if post contains at least one primary AI term
                 const hasPrimaryTerm = primaryAITerms.some(term => postText.includes(term.toLowerCase()));
@@ -41,7 +41,26 @@ export class RedditScraper {
                 
                 // Only accept posts that have both a primary AI term AND a secondary term
                 if (!(hasPrimaryTerm && hasSecondaryTerm)) {
-                    
+                    logger.info(`Skipping post: Insufficient AI-related terms in title/description - Primary: ${hasPrimaryTerm}, Secondary: ${hasSecondaryTerm}`);
+                    return false;
+                }
+                
+                // Additional check: Ensure the primary AI term is actually referring to AI generation, not just mentioning AI
+                const aiGenerationPatterns = [
+                    /ai\s+(generated|created|made|produced|video|animation|render|using|with|by|through)/i,
+                    /(generated|created|made|produced)\s+(by|with|using)\s+ai/i,
+                    /(stable diffusion|midjourney|dall-e|sora)\s+(generated|created|made|produced|video|animation|render|using|with|by|through)/i,
+                    /(generated|created|made|produced)\s+(by|with|using)\s+(stable diffusion|midjourney|dall-e|sora)/i,
+                    /machine learning\s+(generated|created|made|produced)/i,
+                    /neural network\s+(generated|created|made|produced)/i,
+                    /deep learning\s+(generated|created|made|produced)/i,
+                    /algorithm\s+(generated|created|made|produced)/i
+                ];
+                
+                const hasAIGenerationPattern = aiGenerationPatterns.some(pattern => pattern.test(postText));
+                
+                if (!hasAIGenerationPattern) {
+                    logger.info(`Skipping post: No clear AI generation pattern found in title/description`);
                     return false;
                 }
             }
@@ -376,28 +395,86 @@ export class RedditScraper {
     }
 
     static async scrapeSubreddits(): Promise<void> {
-        let totalProcessed = 0;
-
-        try {
-            // Process subreddits sequentially with delays instead of in parallel
-            // This helps avoid Reddit API rate limits
-            for (const config of subreddits) {
-                try {
-                    const count = await this.scrapeSubreddit(config);
-                    totalProcessed += count;
-                    
-                    // Add a 5-second delay between subreddits to avoid rate limiting
-                    if (config !== subreddits[subreddits.length - 1]) {
-                        await this.delay(5000);
-                    }
-                } catch (error) {
-                    logger.error(`Error processing subreddit r/${config.name}`, error);
-                    // Continue with next subreddit even if one fails
-                }
+        logger.info('Starting Reddit scraping...');
+        
+        for (const subredditConfig of subreddits) {
+            try {
+                logger.info(`Scraping subreddit: ${subredditConfig.name}`);
+                const processedCount = await RedditScraper.scrapeSubreddit(subredditConfig);
+                logger.info(`Processed ${processedCount} videos from r/${subredditConfig.name}`);
+                
+                // Add delay between subreddits to be respectful to Reddit's API
+                await RedditScraper.delay(2000);
+            } catch (error) {
+                logger.error(`Error scraping subreddit ${subredditConfig.name}:`, error);
             }
+        }
+        
+        logger.info('Reddit scraping completed.');
+    }
+
+    static async processSinglePost(redditUrl: string, isNsfw: boolean = false): Promise<{ success: boolean; video?: any; error?: string }> {
+        try {
+            // Extract subreddit name and post ID from URL
+            const urlMatch = redditUrl.match(/reddit\.com\/r\/([^\/]+)\/comments\/([^\/]+)\/([^\/]+)/);
+            if (!urlMatch) {
+                return { success: false, error: 'Invalid Reddit URL format' };
+            }
+
+            const [, subredditName, postId] = urlMatch;
             
+            // Get the post using Reddit API
+            const post = await (redditClient.getSubmission(postId) as any).fetch();
+            
+            // Create a mock subreddit config for processing
+            const subredditConfig: SubredditConfig = {
+                name: subredditName,
+                minScore: 1, // Lower threshold for manual submissions
+                excludeTerms: [],
+                searchTerms: [] // No search terms required for manual submissions
+            };
+
+            // Override NSFW check if user explicitly marked it as NSFW
+            if (isNsfw) {
+                post.over_18 = true;
+            }
+
+            // Check if video already exists
+            const existingVideo = await Video.findOne({
+                where: { redditId: post.id }
+            });
+
+            if (existingVideo) {
+                return { success: false, error: 'Video already exists in our collection' };
+            }
+
+            // Process the post using existing logic
+            const processed = await RedditScraper.processPost(post, subredditConfig);
+            
+            if (processed) {
+                // Find the newly created video
+                const newVideo = await Video.findOne({
+                    where: { redditId: post.id }
+                });
+
+                if (newVideo) {
+                    return { success: true, video: newVideo.toJSON() };
+                } else {
+                    return { success: false, error: 'Video was processed but not found in database' };
+                }
+            } else {
+                return { 
+                    success: false, 
+                    error: 'This video does not appear to be AI-generated content. Please submit videos that are clearly created using AI tools like Stable Diffusion, Midjourney, DALL-E, or other AI generation platforms.' 
+                };
+            }
+
         } catch (error) {
-            logger.error('Fatal error during Reddit scraping', error);
+            logger.error('Error processing single post:', error);
+            return { 
+                success: false, 
+                error: error instanceof Error ? error.message : 'Unknown error occurred' 
+            };
         }
     }
 }

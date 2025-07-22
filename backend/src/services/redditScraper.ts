@@ -33,11 +33,19 @@ export class RedditScraper {
                 const primaryAITerms = ['ai', 'artificial intelligence', 'generated', 'stable diffusion', 'midjourney', 'dall-e', 'sora', 'gpt', 'chatgpt', 'machine learning', 'neural network', 'deep learning', 'algorithm', 'automated', 'synthetic'];
                 const secondaryTerms = ['video', 'created', 'made', 'produced', 'animation', 'render', 'generated', 'using', 'with', 'by', 'through'];
                 
-                // Check if post contains at least one primary AI term
-                const hasPrimaryTerm = primaryAITerms.some(term => postText.includes(term.toLowerCase()));
+                // Check if post contains at least one primary AI term (using word boundaries)
+                const hasPrimaryTerm = primaryAITerms.some(term => {
+                    // Use word boundaries to prevent substring matches like "ai" in "rain"
+                    const regex = new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+                    return regex.test(postText);
+                });
                 
-                // Check if post contains at least one secondary term
-                const hasSecondaryTerm = secondaryTerms.some(term => postText.includes(term.toLowerCase()));
+                // Check if post contains at least one secondary term (using word boundaries)
+                const hasSecondaryTerm = secondaryTerms.some(term => {
+                    // Use word boundaries to prevent substring matches
+                    const regex = new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+                    return regex.test(postText);
+                });
                 
                 // Only accept posts that have both a primary AI term AND a secondary term
                 if (!(hasPrimaryTerm && hasSecondaryTerm)) {

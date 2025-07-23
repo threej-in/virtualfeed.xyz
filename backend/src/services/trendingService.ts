@@ -247,12 +247,13 @@ export class TrendingService {
   }
 
   /**
-   * Get homepage videos with mixed trending algorithm optimized for infinite scrolling
-   * Prioritizes trending content but provides continuous stream for infinite scrolling
+   * Get homepage videos - simple recent videos first approach
    * @param limit Total number of videos to return
    * @param offset Pagination offset
    * @param filters Additional filters
-   * @returns Array of mixed trending videos
+   * @param sortBy Sort field (default: 'createdAt')
+   * @param order Sort order (default: 'desc')
+   * @returns Array of recent videos
    */
   public static async getHomepageVideos(
     limit: number = 12,
@@ -261,7 +262,9 @@ export class TrendingService {
       subreddit?: string;
       search?: string;
       showNsfw?: boolean;
-    } = {}
+    } = {},
+    sortBy: string = 'createdAt',
+    order: string = 'desc'
   ): Promise<{ videos: any[]; total: number }> {
     try {
       const db = require('../config/database').default;
@@ -299,55 +302,39 @@ export class TrendingService {
       const [countResult] = await db.query(countQuery, { replacements: baseQueryParams });
       const total = countResult[0].count;
 
-      // For infinite scrolling, we need a continuous stream of videos
-      // Use a weighted scoring system that prioritizes trending content but includes all videos
+      // Validate sort field
+      const validSortFields = ['id', 'title', 'createdAt', 'views', 'likes'];
+      const finalSortBy = validSortFields.includes(sortBy) ? sortBy : 'createdAt';
+      const finalOrder = order === 'asc' ? 'ASC' : 'DESC';
+
+      // Simple query to get videos with proper sorting
       const videosQuery = `
         SELECT 
           *,
           TIMESTAMPDIFF(HOUR, createdAt, NOW()) as hours_since_posted,
-          views as total_views,
-          CASE 
-            WHEN createdAt >= DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN 4  -- 24h videos get highest priority
-            WHEN createdAt >= DATE_SUB(NOW(), INTERVAL 48 HOUR) THEN 3  -- 48h videos get high priority
-            WHEN createdAt >= DATE_SUB(NOW(), INTERVAL 168 HOUR) THEN 2 -- 1w videos get medium priority
-            ELSE 1  -- Older videos get base priority
-          END as time_priority
+          views as total_views
         FROM videos 
         ${baseWhereClause}
-        ORDER BY 
-          time_priority DESC,  -- First by time priority
-          views DESC,          -- Then by views within each time period
-          createdAt DESC       -- Finally by creation date
+        ORDER BY ${finalSortBy} ${finalOrder}
         LIMIT ${limit} OFFSET ${offset}
       `;
       
       const [videos] = await db.query(videosQuery, { replacements: baseQueryParams });
       
-      // Calculate trending scores and transform results
+      // Transform results with basic trending info
       const transformedVideos = videos.map((video: any) => {
         const hoursSincePosted = video.hours_since_posted || 1;
         const trendingScore = this.calculateTrendingScore(video.total_views, hoursSincePosted);
         
-        // Determine the period based on hours since posted
-        let period = 'all';
-        if (hoursSincePosted <= 24) {
-          period = '24h';
-        } else if (hoursSincePosted <= 48) {
-          period = '48h';
-        } else if (hoursSincePosted <= 168) {
-          period = '1w';
-        }
-        
         return {
           ...video,
           trending: {
-            period,
+            period: 'recent',
             hours: hoursSincePosted,
             score: Math.round(trendingScore * 100) / 100,
             viewsPerHour: Math.round((video.total_views / hoursSincePosted) * 100) / 100,
             hoursSincePosted: Math.round(hoursSincePosted * 100) / 100,
-            isFallback: false,
-            timePriority: video.time_priority
+            isFallback: false
           }
         };
       });

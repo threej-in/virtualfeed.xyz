@@ -67,7 +67,9 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
                 subreddit: subreddit as string,
                 search: search as string,
                 showNsfw: showNsfw === 'true'
-            }
+            },
+            sortBy as string,
+            order as string
         );
         
         res.json({
@@ -76,7 +78,7 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
             pages: Math.ceil(result.total / limitNum),
             currentPage: pageNum,
             trending: {
-                period: 'homepage',
+                period: 'recent',
                 hours: 0,
                 isHomepage: true
             }
@@ -139,6 +141,7 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
                 ORDER BY ${finalSortBy} ${finalOrder} 
                 LIMIT ${limitNum} OFFSET ${offset}
             `;
+            console.log(videosQuery);
             const [videos] = await db.query(videosQuery, { replacements: queryParams });
                         
             res.json({

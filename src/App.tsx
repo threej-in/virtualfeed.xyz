@@ -134,7 +134,7 @@ function App() {
     order: 'desc' as 'asc' | 'desc',
     search: undefined as string | undefined,
     showNsfw: false,
-    trending: undefined as '24h' | '48h' | '1w' | undefined, // No trending filter by default - use homepage algorithm
+    trending: undefined as '24h' | '48h' | '1w' | undefined, // No trending filter by default - show recent videos
   });
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [isFallbackContent, setIsFallbackContent] = useState(false);
@@ -440,7 +440,7 @@ function App() {
                     order: 'desc',
                     search: '',
                     showNsfw: false,
-                    trending: undefined, // Use homepage algorithm by default
+                    trending: undefined, // Show recent videos by default
                   });
                   // Reset videos array to trigger a fresh load
                   setVideos([]);

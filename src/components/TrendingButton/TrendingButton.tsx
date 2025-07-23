@@ -124,10 +124,10 @@ const TrendingButton: React.FC<TrendingButtonProps> = ({
   };
 
   const isActive = !!currentTrending;
-  const buttonText = isFallback ? 'Recent' : 'Trending';
+  const buttonText = currentTrending ? 'Trending' : 'Recent';
   const tooltipText = isFallback 
     ? `Showing recent videos (no trending content available for ${getTrendingLabel(currentTrending || '24h')})`
-    : currentTrending ? `Trending: ${getTrendingLabel(currentTrending)}` : 'Show trending videos';
+    : currentTrending ? `Trending: ${getTrendingLabel(currentTrending)}` : 'Click to show trending videos';
 
   return (
     <Box>

@@ -42,6 +42,7 @@ export class TrendingService {
     offset: number = 0,
     filters: {
       subreddit?: string;
+      platform?: string;
       search?: string;
       showNsfw?: boolean;
     } = {}
@@ -260,6 +261,7 @@ export class TrendingService {
     offset: number = 0,
     filters: {
       subreddit?: string;
+      platform?: string;
       search?: string;
       showNsfw?: boolean;
     } = {},
@@ -277,6 +279,12 @@ export class TrendingService {
       if (filters.subreddit) {
         baseWhereConditions.push('subreddit = ?');
         baseQueryParams.push(filters.subreddit);
+      }
+      
+      // Add platform filter
+      if (filters.platform) {
+        baseWhereConditions.push('platform = ?');
+        baseQueryParams.push(filters.platform);
       }
       
       // Add search filter

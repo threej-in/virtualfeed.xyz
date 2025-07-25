@@ -10,19 +10,20 @@ import {
   Alert,
   Snackbar,
   Button,
-  Fab,
 } from '@mui/material';
 import { motion, AnimatePresence } from 'framer-motion';
 import VideoGrid from './components/VideoGrid/VideoGrid';
 import SearchBar from './components/SearchBar/SearchBar';
 import Filters from './components/Filters/Filters';
+import Sidebar from './components/Sidebar/Sidebar';
 import VideoPlayer from './components/VideoPlayer/VideoPlayer';
+import YouTubeVideoPlayer from './components/VideoPlayer/YouTubeVideoPlayer';
 import VideoSubmission from './components/VideoSubmission/VideoSubmission';
 import Background from './components/Background/Background';
 import { Video } from './types/Video';
 import { getVideos, submitVideo } from './services/api';
 import { theme } from './theme';
-import AddIcon from '@mui/icons-material/Add';
+
 
 const StyledContainer = styled(Container)(({ theme }) => ({
   position: 'relative',
@@ -43,7 +44,7 @@ const Header = styled(Box)(({ theme }) => ({
   flexDirection: 'column',
   alignItems: 'center',
   padding: theme.spacing(0.75, 1),
-  marginBottom: theme.spacing(1),
+  marginBottom: theme.spacing(0),
   background: 'rgba(19, 19, 47, 0.95)',
   backdropFilter: 'blur(12px)',
   boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2)',
@@ -58,7 +59,7 @@ const Header = styled(Box)(({ theme }) => ({
   [theme.breakpoints.up('sm')]: {
     flexDirection: 'row',
     padding: theme.spacing(0.75, 1.5),
-    marginBottom: theme.spacing(2),
+    marginBottom: theme.spacing(0),
   },
   right: 0,
   '&:hover': {
@@ -128,11 +129,14 @@ function App() {
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showError, setShowError] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [showSuccess, setShowSuccess] = useState(false);
   const [filterValues, setFilterValues] = useState({
     limit: 12,
     sortBy: 'createdAt' as 'createdAt' | 'views' | 'likes',
     order: 'desc' as 'asc' | 'desc',
     search: undefined as string | undefined,
+    platform: 'reddit', // Default to reddit platform
     showNsfw: false,
     trending: undefined as '24h' | '48h' | '1w' | undefined, // No trending filter by default - show recent videos
   });
@@ -206,6 +210,7 @@ function App() {
       sortBy: filterValues.sortBy,
       order: filterValues.order,
       search: filterValues.search,
+      platform: filterValues.platform,
       showNsfw: filterValues.showNsfw,
       trending: filterValues.trending,
       page: 1
@@ -236,7 +241,7 @@ function App() {
     loadVideos(true, 1);
     
   }, [filterValues.limit, filterValues.sortBy, filterValues.order, 
-      filterValues.search, filterValues.showNsfw, filterValues.trending, loadVideos]);
+      filterValues.search, filterValues.platform, filterValues.showNsfw, filterValues.trending, loadVideos]);
       
   // Keep track of initial render state
   const isInitialRender = useRef(true);
@@ -288,6 +293,10 @@ function App() {
   const handleTrendingChange = (period: '24h' | '48h' | '1w' | undefined) => {
     setFilterValues(prev => ({ ...prev, trending: period }));
   };
+
+  const handlePlatformChange = (platform: string) => {
+    setFilterValues(prev => ({ ...prev, platform }));
+  };
   
   // Function to handle tag clicks for filtering videos
   const handleTagClick = (tag: string) => {
@@ -297,12 +306,20 @@ function App() {
 
   const handleCloseError = () => {
     setShowError(false);
+    setError(null);
+  };
+
+  const handleCloseSuccess = () => {
+    setShowSuccess(false);
+    setSuccessMessage(null);
   };
 
   const handleSubmitVideo = async (redditUrl: string, isNsfw: boolean) => {
     try {
       await submitVideo(redditUrl, isNsfw);
       setIsVideoSubmissionOpen(false);
+      setSuccessMessage('Video submitted successfully!');
+      setShowSuccess(true);
       // Don't reload videos immediately - let user continue browsing
       // The video will appear in the next natural refresh
     } catch (error) {
@@ -322,6 +339,11 @@ function App() {
             {error}
           </Alert>
         </Snackbar>
+        <Snackbar open={showSuccess} autoHideDuration={6000} onClose={handleCloseSuccess}>
+          <Alert onClose={handleCloseSuccess} severity="success" sx={{ width: '100%' }}>
+            {successMessage}
+          </Alert>
+        </Snackbar>
         <Header className="sticky-header">
           <motion.div
             initial={{ opacity: 0, y: -10 }}
@@ -330,7 +352,8 @@ function App() {
             style={{ width: '100%', display: 'flex', flexGrow: 1 }}
           >
             <LogoSection sx={{ 
-              display: { xs: isSearchExpanded ? 'none' : 'flex', sm: 'flex' }
+              display: { xs: isSearchExpanded ? 'none' : 'flex', sm: 'flex' },
+              paddingLeft: { md: 3 } // Align with sidebar padding
             }}>
               <Typography 
                 variant="h5" 
@@ -341,6 +364,7 @@ function App() {
                     sortBy: 'createdAt',
                     order: 'desc',
                     search: '',
+                    platform: '',
                     showNsfw: false,
                     trending: undefined, // Use homepage algorithm by default
                   });
@@ -428,67 +452,88 @@ function App() {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.3 }}
             >
-              <VideoGrid
-                videos={videos}
-                onVideoClick={(video) => setSelectedVideo(video)}
-                lastVideoRef={lastVideoElementRef}
-                onResetFilters={() => {
-                  // Reset all filters and return to homepage
-                  setFilterValues({
-                    limit: 12,
-                    sortBy: 'createdAt',
-                    order: 'desc',
-                    search: '',
-                    showNsfw: false,
-                    trending: undefined, // Show recent videos by default
-                  });
-                  // Reset videos array to trigger a fresh load
-                  setVideos([]);
-                  setCurrentPage(1);
-                  setHasMore(true);
-                }}
-              />
-              
-              {/* Loading indicator at bottom */}
-              {loading && videos.length > 0 && (
-                <Box display="flex" justifyContent="center" p={4}>
-                  <CircularProgress size={40} />
+              <Box sx={{ display: 'flex', minHeight: 'calc(100vh - 120px)' }}>
+                {/* Sidebar */}
+                <Sidebar
+                  currentPlatform={filterValues.platform || ''}
+                  onPlatformChange={handlePlatformChange}
+                  onVideoSubmission={() => setIsVideoSubmissionOpen(true)}
+                />
+                
+                                {/* Main Content Area */}
+                <Box sx={{ flex: 1, p: 3, marginLeft: { md: '250px' } }}>
+                  <VideoGrid
+                    videos={videos}
+                    onVideoClick={(video) => setSelectedVideo(video)}
+                    lastVideoRef={lastVideoElementRef}
+                    onResetFilters={() => {
+                      // Reset all filters and return to homepage
+                      setFilterValues({
+                        limit: 12,
+                        sortBy: 'createdAt',
+                        order: 'desc',
+                        search: '',
+                        platform: 'reddit',
+                        showNsfw: false,
+                        trending: undefined, // Show recent videos by default
+                      });
+                      // Reset videos array to trigger a fresh load
+                      setVideos([]);
+                      setCurrentPage(1);
+                      setHasMore(true);
+                    }}
+                  />
+                  
+                  {/* Loading indicator at bottom */}
+                  {loading && videos.length > 0 && (
+                    <Box display="flex" justifyContent="center" p={4}>
+                      <CircularProgress size={40} />
+                    </Box>
+                  )}
+                  
+                  {/* No more videos message */}
+                  {!hasMore && videos.length > 0 && (
+                    <Box display="flex" justifyContent="center" p={4}>
+                      <Typography variant="body2" color="text.secondary">
+                        No more videos to load
+                      </Typography>
+                    </Box>
+                  )}
+                  
+                  {/* Manual load more button as fallback */}
+                  {hasMore && videos.length > 0 && !loading && (
+                    <Box display="flex" justifyContent="center" p={4}>
+                      <Button 
+                        variant="outlined" 
+                        color="primary" 
+                        onClick={() => loadMoreVideos()}
+                      >
+                        Load More
+                      </Button>
+                    </Box>
+                  )}
                 </Box>
-              )}
-              
-              {/* No more videos message */}
-              {!hasMore && videos.length > 0 && (
-                <Box display="flex" justifyContent="center" p={4}>
-                  <Typography variant="body2" color="text.secondary">
-                    No more videos to load
-                  </Typography>
-                </Box>
-              )}
-              
-              {/* Manual load more button as fallback */}
-              {hasMore && videos.length > 0 && !loading && (
-                <Box display="flex" justifyContent="center" p={4}>
-                  <Button 
-                    variant="outlined" 
-                    color="primary" 
-                    onClick={() => loadMoreVideos()}
-                  >
-                    Load More
-                  </Button>
-                </Box>
-              )}
+              </Box>
             </motion.div>
           )}
         </AnimatePresence>
 
         {/* Video Player with swipe functionality */}
-        <VideoPlayer
-          videos={videos}
-          initialVideoIndex={selectedVideo ? videos.findIndex(v => v.id === selectedVideo.id) : 0}
-          open={!!selectedVideo}
-          onClose={() => setSelectedVideo(null)}
-          onTagClick={handleTagClick}
-        />
+        {selectedVideo?.platform === 'youtube' ? (
+          <YouTubeVideoPlayer
+            video={selectedVideo}
+            open={!!selectedVideo}
+            onClose={() => setSelectedVideo(null)}
+          />
+        ) : (
+          <VideoPlayer
+            videos={videos}
+            initialVideoIndex={selectedVideo ? videos.findIndex(v => v.id === selectedVideo.id) : 0}
+            open={!!selectedVideo}
+            onClose={() => setSelectedVideo(null)}
+            onTagClick={handleTagClick}
+          />
+        )}
 
         {/* Video Submission Modal */}
         <VideoSubmission
@@ -497,20 +542,7 @@ function App() {
           onSubmit={handleSubmitVideo}
         />
 
-        {/* Floating Action Button */}
-        <Fab
-          color="primary"
-          aria-label="add"
-          onClick={() => setIsVideoSubmissionOpen(true)}
-          sx={{
-            position: 'fixed',
-            bottom: theme.spacing(2),
-            right: theme.spacing(2),
-            zIndex: 1000,
-          }}
-        >
-          <AddIcon />
-        </Fab>
+
       </StyledContainer>
     </ThemeProvider>
   );

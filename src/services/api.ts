@@ -19,6 +19,8 @@ export interface VideoFilters {
     page?: number;
     limit?: number;
     search?: string;
+    subreddit?: string;
+    platform?: string;
     sortBy?: 'createdAt' | 'views' | 'likes';
     order?: 'asc' | 'desc';
     showNsfw?: boolean;

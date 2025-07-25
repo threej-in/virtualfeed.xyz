@@ -18,6 +18,7 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
             sortBy = 'createdAt',
             order = 'desc',
             subreddit,
+            platform,
             showNsfw = 'false',
             trending
         } = req.query;
@@ -36,6 +37,7 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
                     offset,
                     {
                         subreddit: subreddit as string,
+                        platform: platform as string,
                         search: search as string,
                         showNsfw: showNsfw === 'true'
                     }
@@ -65,6 +67,7 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
             offset,
             {
                 subreddit: subreddit as string,
+                platform: platform as string,
                 search: search as string,
                 showNsfw: showNsfw === 'true'
             },

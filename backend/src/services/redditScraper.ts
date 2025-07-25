@@ -7,10 +7,9 @@ import { Submission, Listing } from 'snoowrap';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
-import { DuplicateVideoDetector } from './duplicateVideoDetector';
 
 export class RedditScraper {
-    private static async processPost(post: Submission, subredditConfig: SubredditConfig): Promise<boolean> {
+    private static async processPost(post: Submission, subredditConfig: SubredditConfig, isManualSubmission: boolean = false): Promise<boolean> {
         try {
             // Log post details for debugging - only at debug level
             // 
@@ -22,54 +21,71 @@ export class RedditScraper {
             }
             
             // For AI-focused subreddits, we don't need to check for search terms
-            const aiSubreddits = ['StableDiffusion', 'midjourney', 'sdforall', 'aivideo', 'AIGeneratedContent', 'aiArt'];
+            const aiSubreddits = ['StableDiffusion', 'midjourney', 'sdforall', 'aivideo', 'AIGeneratedContent', 'aiArt', 'chatgpttoolbox', 'aiart', 'artificial', 'machinelearning'];
             const isAIFocusedSubreddit = aiSubreddits.includes(post.subreddit.display_name);
             
             // Check for required search terms (only for non-AI-focused subreddits)
             if (!isAIFocusedSubreddit) {
                 const postText = `${post.title} ${post.selftext || ''} ${post.link_flair_text || ''}`.toLowerCase();
                 
-                // STRICT FILTERING: Require at least one primary AI term AND one secondary term
-                const primaryAITerms = ['ai', 'artificial intelligence', 'generated', 'stable diffusion', 'midjourney', 'dall-e', 'sora', 'gpt', 'chatgpt', 'machine learning', 'neural network', 'deep learning', 'algorithm', 'automated', 'synthetic'];
-                const secondaryTerms = ['video', 'created', 'made', 'produced', 'animation', 'render', 'generated', 'using', 'with', 'by', 'through'];
-                
-                // Check if post contains at least one primary AI term (using word boundaries)
-                const hasPrimaryTerm = primaryAITerms.some(term => {
-                    // Use word boundaries to prevent substring matches like "ai" in "rain"
-                    const regex = new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
-                    return regex.test(postText);
-                });
-                
-                // Check if post contains at least one secondary term (using word boundaries)
-                const hasSecondaryTerm = secondaryTerms.some(term => {
-                    // Use word boundaries to prevent substring matches
-                    const regex = new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
-                    return regex.test(postText);
-                });
-                
-                // Only accept posts that have both a primary AI term AND a secondary term
-                if (!(hasPrimaryTerm && hasSecondaryTerm)) {
-                    logger.info(`Skipping post: Insufficient AI-related terms in title/description - Primary: ${hasPrimaryTerm}, Secondary: ${hasSecondaryTerm}`);
-                    return false;
-                }
-                
-                // Additional check: Ensure the primary AI term is actually referring to AI generation, not just mentioning AI
-                const aiGenerationPatterns = [
-                    /ai\s+(generated|created|made|produced|video|animation|render|using|with|by|through)/i,
-                    /(generated|created|made|produced)\s+(by|with|using)\s+ai/i,
-                    /(stable diffusion|midjourney|dall-e|sora)\s+(generated|created|made|produced|video|animation|render|using|with|by|through)/i,
-                    /(generated|created|made|produced)\s+(by|with|using)\s+(stable diffusion|midjourney|dall-e|sora)/i,
-                    /machine learning\s+(generated|created|made|produced)/i,
-                    /neural network\s+(generated|created|made|produced)/i,
-                    /deep learning\s+(generated|created|made|produced)/i,
-                    /algorithm\s+(generated|created|made|produced)/i
-                ];
-                
-                const hasAIGenerationPattern = aiGenerationPatterns.some(pattern => pattern.test(postText));
-                
-                if (!hasAIGenerationPattern) {
-                    logger.info(`Skipping post: No clear AI generation pattern found in title/description`);
-                    return false;
+                // For manual submissions, use more lenient filtering
+                if (isManualSubmission) {
+                    // LENIENT FILTERING: Require at least one AI-related term
+                    const aiTerms = ['ai', 'artificial intelligence', 'generated', 'stable diffusion', 'midjourney', 'dall-e', 'sora', 'gpt', 'chatgpt', 'machine learning', 'neural network', 'deep learning', 'algorithm', 'automated', 'synthetic', 'aigenerated', 'ai-generated', 'ai generated'];
+                    
+                    const hasAITerm = aiTerms.some(term => {
+                        // Use word boundaries to prevent substring matches like "ai" in "rain"
+                        const regex = new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+                        return regex.test(postText);
+                    });
+                    
+                    if (!hasAITerm) {
+                        logger.info(`Manual submission rejected: No AI-related terms found in title/description`);
+                        return false;
+                    }
+                } else {
+                    // STRICT FILTERING: Require at least one primary AI term AND one secondary term
+                    const primaryAITerms = ['ai', 'artificial intelligence', 'generated', 'stable diffusion', 'midjourney', 'dall-e', 'sora', 'gpt', 'chatgpt', 'machine learning', 'neural network', 'deep learning', 'algorithm', 'automated', 'synthetic'];
+                    const secondaryTerms = ['video', 'created', 'made', 'produced', 'animation', 'render', 'generated', 'using', 'with', 'by', 'through'];
+                    
+                    // Check if post contains at least one primary AI term (using word boundaries)
+                    const hasPrimaryTerm = primaryAITerms.some(term => {
+                        // Use word boundaries to prevent substring matches like "ai" in "rain"
+                        const regex = new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+                        return regex.test(postText);
+                    });
+                    
+                    // Check if post contains at least one secondary term (using word boundaries)
+                    const hasSecondaryTerm = secondaryTerms.some(term => {
+                        // Use word boundaries to prevent substring matches
+                        const regex = new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+                        return regex.test(postText);
+                    });
+                    
+                    // Only accept posts that have both a primary AI term AND a secondary term
+                    if (!(hasPrimaryTerm && hasSecondaryTerm)) {
+                        logger.info(`Skipping post: Insufficient AI-related terms in title/description - Primary: ${hasPrimaryTerm}, Secondary: ${hasSecondaryTerm}`);
+                        return false;
+                    }
+                    
+                    // Additional check: Ensure the primary AI term is actually referring to AI generation, not just mentioning AI
+                    const aiGenerationPatterns = [
+                        /ai\s+(generated|created|made|produced|video|animation|render|using|with|by|through)/i,
+                        /(generated|created|made|produced)\s+(by|with|using)\s+ai/i,
+                        /(stable diffusion|midjourney|dall-e|sora)\s+(generated|created|made|produced|video|animation|render|using|with|by|through)/i,
+                        /(generated|created|made|produced)\s+(by|with|using)\s+(stable diffusion|midjourney|dall-e|sora)/i,
+                        /machine learning\s+(generated|created|made|produced)/i,
+                        /neural network\s+(generated|created|made|produced)/i,
+                        /deep learning\s+(generated|created|made|produced)/i,
+                        /algorithm\s+(generated|created|made|produced)/i
+                    ];
+                    
+                    const hasAIGenerationPattern = aiGenerationPatterns.some(pattern => pattern.test(postText));
+                    
+                    if (!hasAIGenerationPattern) {
+                        logger.info(`Skipping post: No clear AI generation pattern found in title/description`);
+                        return false;
+                    }
                 }
             }
 
@@ -245,6 +261,7 @@ export class RedditScraper {
                 thumbnailUrl,
                 redditId: post.id,
                 subreddit: post.subreddit.display_name,
+                platform: 'reddit',
                 tags,
                 nsfw: isNsfw,
                 likes: post.score, // Store upvotes in likes column for frontend display
@@ -276,16 +293,6 @@ export class RedditScraper {
                     }
                 }
                 
-                // If no exact match by redditId, check for duplicate videos using similarity metrics
-                const potentialDuplicate = await DuplicateVideoDetector.findDuplicateVideo(post, videoMetadata);
-                
-                if (potentialDuplicate) {
-                    // Handle the duplicate - either update the existing one or skip this one
-                    const result = await DuplicateVideoDetector.handleDuplicate(post, videoData, potentialDuplicate);
-                    return result !== null; // Return true if we kept/updated a video, false if we skipped it
-                }
-                
-                // No duplicate found, create a new video
                 await Video.create({
                     ...videoData,
                     createdAt: new Date(post.created_utc * 1000),
@@ -457,7 +464,7 @@ export class RedditScraper {
             }
 
             // Process the post using existing logic
-            const processed = await RedditScraper.processPost(post, subredditConfig);
+            const processed = await RedditScraper.processPost(post, subredditConfig, true); // true = manual submission
             
             if (processed) {
                 // Find the newly created video

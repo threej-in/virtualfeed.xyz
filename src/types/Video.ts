@@ -6,6 +6,7 @@ export interface Video {
     thumbnailUrl: string;
     redditId: string;
     subreddit: string;
+    platform: string;
     createdAt: string;
     tags: string[];
     views: number;
@@ -16,10 +17,14 @@ export interface Video {
         height: number;
         format: string;
         duration: number;
-        redditScore: number;
-        redditUrl: string;
+        redditScore?: number;
+        redditUrl?: string;
         upvotes?: number;
         audioUrl?: string; // Added for Reddit videos with separate audio tracks
+        platform?: string;
+        youtubeId?: string;
+        youtubeUrl?: string;
+        publishedAt?: string;
     };
     // Trending information (optional)
     trending?: {

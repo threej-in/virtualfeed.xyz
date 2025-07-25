@@ -80,7 +80,6 @@ const VideoSubmission: React.FC<VideoSubmissionProps> = ({ open, onClose, onSubm
   const [isNsfw, setIsNsfw] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
 
   const handleSubmit = async () => {
     if (!redditUrl.trim()) {
@@ -100,13 +99,10 @@ const VideoSubmission: React.FC<VideoSubmissionProps> = ({ open, onClose, onSubm
 
     try {
       await onSubmit(redditUrl, isNsfw);
-      setSuccess(true);
+      // Reset form and close modal - success message is handled by parent
       setRedditUrl('');
       setIsNsfw(false);
-      setTimeout(() => {
-        setSuccess(false);
-        onClose();
-      }, 2000);
+      onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to submit video');
     } finally {
@@ -119,7 +115,6 @@ const VideoSubmission: React.FC<VideoSubmissionProps> = ({ open, onClose, onSubm
       setRedditUrl('');
       setIsNsfw(false);
       setError('');
-      setSuccess(false);
       onClose();
     }
   };
@@ -146,166 +141,143 @@ const VideoSubmission: React.FC<VideoSubmissionProps> = ({ open, onClose, onSubm
         </DialogTitle>
 
         <DialogContent sx={{ pt: 2 }}>
-          {success ? (
-            <Box sx={{ textAlign: 'center', py: 3 }}>
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: "spring", stiffness: 260, damping: 20 }}
-              >
-                               <Alert severity="success" sx={{ 
-                 mb: 2,
-                 backgroundColor: 'rgba(76, 175, 80, 0.1)',
-                 color: '#4caf50',
-                 border: '1px solid rgba(76, 175, 80, 0.3)'
-               }}>
-                 Video submitted successfully! It will be reviewed and added to our collection.
-               </Alert>
-              </motion.div>
-            </Box>
-          ) : (
-            <>
-              <Box sx={{ mb: 3 }}>
-                                 <Alert 
-                   severity="info" 
-                   icon={<InfoIcon />}
-                   sx={{ 
-                     borderRadius: 2,
-                     background: 'rgba(25, 118, 210, 0.1)',
-                     border: '1px solid rgba(25, 118, 210, 0.3)',
-                     color: '#64b5f6'
-                   }}
-                 >
-                                   <Typography variant="body2">
-                   Share your favorite AI-generated videos from Reddit! We only accept videos that are clearly created using AI tools like Stable Diffusion, Midjourney, DALL-E, or other AI generation platforms.
-                 </Typography>
-                </Alert>
-              </Box>
+          <Box sx={{ mb: 3 }}>
+            <Alert 
+              severity="info" 
+              icon={<InfoIcon />}
+              sx={{ 
+                borderRadius: 2,
+                background: 'rgba(25, 118, 210, 0.1)',
+                border: '1px solid rgba(25, 118, 210, 0.3)',
+                color: '#64b5f6'
+              }}
+            >
+              <Typography variant="body2">
+                Share your favorite AI-generated videos from Reddit! We only accept videos that are clearly created using AI tools like Stable Diffusion, Midjourney, DALL-E, or other AI generation platforms.
+              </Typography>
+            </Alert>
+          </Box>
 
-              <Box sx={{ mb: 3 }}>
-                <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1 }}>
-                  Reddit Video URL
-                </Typography>
-                <StyledTextField
-                  fullWidth
-                  placeholder="https://reddit.com/r/artificial/comments/..."
-                  value={redditUrl}
-                  onChange={(e) => setRedditUrl(e.target.value)}
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1 }}>
+              Reddit Video URL
+            </Typography>
+            <StyledTextField
+              fullWidth
+              placeholder="https://reddit.com/r/artificial/comments/..."
+              value={redditUrl}
+              onChange={(e) => setRedditUrl(e.target.value)}
+              disabled={isSubmitting}
+              InputProps={{
+                startAdornment: <LinkIcon sx={{ mr: 1, color: 'text.secondary' }} />,
+              }}
+            />
+            <Typography variant="caption" sx={{ mt: 1, display: 'block', color: 'rgba(255, 255, 255, 0.6)' }}>
+              Paste the full URL of the Reddit post containing the AI video
+            </Typography>
+          </Box>
+
+          <Box sx={{ mb: 3 }}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={isNsfw}
+                  onChange={(e) => setIsNsfw(e.target.checked)}
                   disabled={isSubmitting}
-                  InputProps={{
-                    startAdornment: <LinkIcon sx={{ mr: 1, color: 'text.secondary' }} />,
+                  sx={{
+                    '& .MuiSwitch-switchBase.Mui-checked': {
+                      color: '#ff6b6b',
+                      '&:hover': {
+                        backgroundColor: 'rgba(255, 107, 107, 0.08)',
+                      },
+                    },
+                    '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                      backgroundColor: '#ff6b6b',
+                    },
                   }}
                 />
-                <Typography variant="caption" sx={{ mt: 1, display: 'block', color: 'rgba(255, 255, 255, 0.6)' }}>
-                  Paste the full URL of the Reddit post containing the AI video
+              }
+              label={
+                <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)' }}>
+                  This video contains NSFW content
                 </Typography>
-              </Box>
+              }
+            />
+          </Box>
 
-              <Box sx={{ mb: 3 }}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={isNsfw}
-                      onChange={(e) => setIsNsfw(e.target.checked)}
-                      disabled={isSubmitting}
-                      sx={{
-                        '& .MuiSwitch-switchBase.Mui-checked': {
-                          color: '#ff6b6b',
-                          '&:hover': {
-                            backgroundColor: 'rgba(255, 107, 107, 0.08)',
-                          },
-                        },
-                        '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                          backgroundColor: '#ff6b6b',
-                        },
-                      }}
-                    />
-                  }
-                  label={
-                    <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)' }}>
-                      This video contains NSFW content
-                    </Typography>
-                  }
-                />
-              </Box>
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>
+              What we're looking for:
+            </Typography>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+              <Chip 
+                label="AI Generated" 
+                size="small" 
+                color="primary" 
+                variant="outlined"
+              />
+              <Chip 
+                label="Machine Learning" 
+                size="small" 
+                color="primary" 
+                variant="outlined"
+              />
+              <Chip 
+                label="Neural Networks" 
+                size="small" 
+                color="primary" 
+                variant="outlined"
+              />
+              <Chip 
+                label="Deep Learning" 
+                size="small" 
+                color="primary" 
+                variant="outlined"
+              />
+              <Chip 
+                label="AI Art" 
+                size="small" 
+                color="primary" 
+                variant="outlined"
+              />
+              <Chip 
+                label="AI Tools" 
+                size="small" 
+                color="primary" 
+                variant="outlined"
+              />
+            </Box>
+          </Box>
 
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>
-                  What we're looking for:
-                </Typography>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                  <Chip 
-                    label="AI Generated" 
-                    size="small" 
-                    color="primary" 
-                    variant="outlined"
-                  />
-                  <Chip 
-                    label="Machine Learning" 
-                    size="small" 
-                    color="primary" 
-                    variant="outlined"
-                  />
-                  <Chip 
-                    label="Neural Networks" 
-                    size="small" 
-                    color="primary" 
-                    variant="outlined"
-                  />
-                  <Chip 
-                    label="Deep Learning" 
-                    size="small" 
-                    color="primary" 
-                    variant="outlined"
-                  />
-                  <Chip 
-                    label="AI Art" 
-                    size="small" 
-                    color="primary" 
-                    variant="outlined"
-                  />
-                  <Chip 
-                    label="AI Tools" 
-                    size="small" 
-                    color="primary" 
-                    variant="outlined"
-                  />
-                </Box>
-              </Box>
-
-                             {error && (
-                 <Alert severity="error" sx={{ 
-                   mb: 2,
-                   backgroundColor: 'rgba(244, 67, 54, 0.1)',
-                   color: '#f44336',
-                   border: '1px solid rgba(244, 67, 54, 0.3)'
-                 }}>
-                   {error}
-                 </Alert>
-               )}
-            </>
+          {error && (
+            <Alert severity="error" sx={{ 
+              mb: 2,
+              backgroundColor: 'rgba(244, 67, 54, 0.1)',
+              color: '#f44336',
+              border: '1px solid rgba(244, 67, 54, 0.3)'
+            }}>
+              {error}
+            </Alert>
           )}
         </DialogContent>
 
-        {!success && (
-          <DialogActions sx={{ px: 3, pb: 3 }}>
-            <Button 
-              onClick={handleClose} 
-              disabled={isSubmitting}
-              sx={{ borderRadius: 2 }}
-            >
-              Cancel
-            </Button>
-            <SubmitButton
-              onClick={handleSubmit}
-              disabled={isSubmitting || !redditUrl.trim()}
-              variant="contained"
-              startIcon={isSubmitting ? <CircularProgress size={16} color="inherit" /> : <RedditIcon />}
-            >
-              {isSubmitting ? 'Submitting...' : 'Submit Video'}
-            </SubmitButton>
-          </DialogActions>
-        )}
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button 
+            onClick={handleClose} 
+            disabled={isSubmitting}
+            sx={{ borderRadius: 2 }}
+          >
+            Cancel
+          </Button>
+          <SubmitButton
+            onClick={handleSubmit}
+            disabled={isSubmitting || !redditUrl.trim()}
+            variant="contained"
+            startIcon={isSubmitting ? <CircularProgress size={16} color="inherit" /> : <RedditIcon />}
+          >
+            {isSubmitting ? 'Submitting...' : 'Submit Video'}
+          </SubmitButton>
+        </DialogActions>
       </motion.div>
     </StyledDialog>
   );

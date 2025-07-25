@@ -254,7 +254,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick }) => {
                 {/* Single container for both skeleton and image to ensure consistent sizing */}
                 <Box sx={{
                     position: 'relative',
-                    paddingTop: '56.25%', // 16:9 aspect ratio - consistent for both skeleton and image
+                    paddingTop: '177.78%', // 9:16 aspect ratio like YouTube Shorts
                     overflow: 'hidden',
                 }}>
                     {/* Skeleton overlay */}

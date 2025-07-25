@@ -1,4 +1,5 @@
 import { RedditScraper } from '../services/redditScraper';
+import { YouTubeScraper } from '../services/youtubeScraper';
 import { logger } from '../services/logger';
 import sequelize from '../config/database';
 
@@ -17,7 +18,12 @@ async function main() {
         await RedditScraper.scrapeSubreddits();
         logger.info('Reddit scraping completed.');
 
-        logger.info('Total scraping completed. Processed videos from Reddit.');
+        // Start YouTube scraping
+        logger.info('Starting YouTube scraping...');
+        const youtubeCount = await YouTubeScraper.scrapeYouTubeVideos();
+        logger.info(`YouTube scraping completed. Processed ${youtubeCount} videos.`);
+
+        logger.info('Total scraping completed. Processed videos from Reddit and YouTube.');
 
     } catch (error) {
         logger.error('Error in scrape script:', error);

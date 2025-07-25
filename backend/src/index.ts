@@ -7,6 +7,7 @@ import { logger } from './services/logger';
 import sequelize from './config/database';
 import videoRoutes from './routes/videoRoutes';
 import blacklistRoutes from './routes/blacklistRoutes';
+import { YouTubeScraper } from './services/youtubeScraper';
 
 dotenv.config();
 
@@ -65,6 +66,7 @@ async function startServer() {
         const startScraping = async () => {
             try {
                 await RedditScraper.scrapeSubreddits();
+                await YouTubeScraper.scrapeYouTubeVideos();
             } catch (error) {
                 logger.error('Error in scraping cycle:', error);
             }
@@ -75,8 +77,8 @@ async function startServer() {
         
         if (enableScraping) {
             logger.info('Reddit scraping is enabled');
-            // Schedule periodic scraping (every 60 minutes instead of 30 to reduce API calls)
-            setInterval(startScraping, 60 * 60 * 1000);
+            // Schedule periodic scraping (every 24 hours to reduce API calls)
+            setInterval(startScraping, 24 * 60 * 60 * 1000);
             
             // Delay initial scrape by 10 seconds to ensure server is fully started
             setTimeout(() => {

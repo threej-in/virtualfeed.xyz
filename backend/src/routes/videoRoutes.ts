@@ -32,14 +32,12 @@ router.post('/submit', async (req: any, res: any) => {
     const result = await RedditScraper.processSinglePost(redditUrl, isNsfw);
 
     if (result.success) {
-      logger.info(`Video submitted successfully: ${result.video?.title}`);
       res.json({
         success: true,
         message: 'Video submitted successfully! It will be reviewed and added to our collection.',
         video: result.video
       });
     } else {
-      logger.warn(`Video submission failed: ${result.error}`);
       res.status(400).json({
         success: false,
         message: result.error || 'Failed to process video'

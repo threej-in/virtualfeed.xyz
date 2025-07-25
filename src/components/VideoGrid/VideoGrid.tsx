@@ -2,6 +2,7 @@ import React from 'react';
 import { Grid, Box, Typography, Button } from '@mui/material';
 import { Home as HomeIcon } from '@mui/icons-material';
 import VideoCard from '../VideoCard/VideoCard';
+import YouTubeVideoCard from '../VideoCard/YouTubeVideoCard';
 import { Video } from '../../types/Video';
 
 interface VideoGridProps {
@@ -93,15 +94,22 @@ const VideoGrid: React.FC<VideoGridProps> = ({ videos, onVideoClick, lastVideoRe
             {videos.map((video, index) => (
                 <Grid 
                     item 
-                    xs={6} 
-                    sm={4} 
-                    md={3} 
-                    lg={3}
+                    xs={5} 
+                    sm={3.5} 
+                    md={2.8} 
+                    lg={2.1}
                     key={video.id}
                     // Apply ref to the last video item for infinite scrolling
                     ref={index === videos.length - 1 ? lastVideoRef : undefined}
                 >
-                    <VideoCard video={video} onClick={() => onVideoClick(video)} />
+                    {video.platform === 'youtube' ? (
+                        <YouTubeVideoCard 
+                            video={video} 
+                            onVideoClick={onVideoClick} 
+                        />
+                    ) : (
+                        <VideoCard video={video} onClick={() => onVideoClick(video)} />
+                    )}
                 </Grid>
             ))}
             </Grid>

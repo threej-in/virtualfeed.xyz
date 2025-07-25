@@ -9,6 +9,7 @@ interface VideoAttributes {
   thumbnailUrl: string;
   redditId: string;
   subreddit: string;
+  platform: string;
   tags: string[];
   views: number;
   likes: number;
@@ -19,7 +20,7 @@ interface VideoAttributes {
   updatedAt?: Date;
 }
 
-interface VideoCreationAttributes extends Optional<VideoAttributes, 'id' | 'views' | 'likes'> {}
+interface VideoCreationAttributes extends Optional<VideoAttributes, 'id' | 'views' | 'likes' | 'platform'> {}
 
 class Video extends Model<VideoAttributes, VideoCreationAttributes> implements VideoAttributes {
   public id!: number;
@@ -29,6 +30,7 @@ class Video extends Model<VideoAttributes, VideoCreationAttributes> implements V
   public thumbnailUrl!: string;
   public redditId!: string;
   public subreddit!: string;
+  public platform!: string;
   public tags!: string[];
   public views!: number;
   public likes!: number;
@@ -72,6 +74,11 @@ Video.init(
     subreddit: {
       type: DataTypes.STRING,
       allowNull: false,
+    },
+    platform: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: 'reddit',
     },
     tags: {
       type: DataTypes.JSON,

@@ -109,7 +109,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                     // For Reddit videos, we need to handle audio separately
                     // Reddit stores audio and video separately
                     const quality = getVideoQuality(videoId);
-                    return `https://v.redd.it/${videoId}/DASH_${quality}.mp4`;
+                    return `https://v.redd.it/${videoId}/DASH_${quality}.mp4?source=fallback`;
                 }
             }
         }

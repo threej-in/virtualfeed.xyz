@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Grid, Box, Typography, Button } from '@mui/material';
 import { Home as HomeIcon } from '@mui/icons-material';
 import VideoCard from '../VideoCard/VideoCard';
@@ -10,9 +10,21 @@ interface VideoGridProps {
     onVideoClick: (video: Video) => void;
     lastVideoRef?: (node: HTMLDivElement | null) => void;
     onResetFilters?: () => void;
+    playingVideoId?: number | null;
+    focusedVideoId?: number | null;
+    videoFocusObserver?: React.RefObject<IntersectionObserver | null>;
 }
 
-const VideoGrid: React.FC<VideoGridProps> = ({ videos, onVideoClick, lastVideoRef, onResetFilters }) => {
+const VideoGrid: React.FC<VideoGridProps> = ({ videos, onVideoClick, lastVideoRef, onResetFilters, playingVideoId, focusedVideoId, videoFocusObserver }) => {
+    // Cleanup observers when videos change
+    useEffect(() => {
+        return () => {
+            if (videoFocusObserver?.current) {
+                videoFocusObserver.current.disconnect();
+            }
+        };
+    }, [videos, videoFocusObserver]);
+
     // Show empty state when there are no videos
     if (!videos || videos.length === 0) {
         return (
@@ -80,35 +92,67 @@ const VideoGrid: React.FC<VideoGridProps> = ({ videos, onVideoClick, lastVideoRe
         <Box 
             sx={{ 
                 width: '100%',
-                maxWidth: '1100px',
+                maxWidth: { xs: '100%', sm: '1100px' },
                 margin: '0 auto',
-                py: { xs: 0.5, sm: 1 },
-                px: { xs: 0.5, sm: 1 },
+                py: 0,
+                px: { xs: 0, sm: 1 },
+                height: '100%',
+                // Snap scrolling for mobile - only one video visible at a time
+                '@media (max-width: 600px)': {
+                    height: '100vh',
+                    overflowY: 'auto',
+                    scrollSnapType: 'y mandatory',
+                    scrollBehavior: 'smooth',
+                },
             }}
         >
             <Grid 
                 container 
-                spacing={{ xs: 1, sm: 1.5 }}
+                spacing={{ xs: 0, sm: 1.5 }}
                 justifyContent="center"
             >
             {videos.map((video, index) => (
                 <Grid 
                     item 
-                    xs={5} 
+                    xs={12} 
                     sm={3.5} 
                     md={2.8} 
                     lg={2.1}
                     key={video.id}
                     // Apply ref to the last video item for infinite scrolling
-                    ref={index === videos.length - 1 ? lastVideoRef : undefined}
+                    ref={(node) => {
+                        // Handle infinite scrolling ref
+                        if (index === videos.length - 1) {
+                            lastVideoRef?.(node);
+                        }
+                        
+                        // Handle video focus observer
+                        if (videoFocusObserver?.current && node) {
+                            node.setAttribute('data-video-id', video.id.toString());
+                            videoFocusObserver.current.observe(node);
+                        }
+                    }}
+                    sx={{
+                        // Mobile: full width, no padding
+                        // Desktop: normal grid spacing
+                        px: { xs: 0, sm: 1 },
+                        pb: { xs: 0, sm: 1 },
+                        // Snap scrolling for mobile
+                        '@media (max-width: 600px)': {
+                            scrollSnapAlign: 'start',
+                            height: '100vh',
+                        },
+                    }}
                 >
                     {video.platform === 'youtube' ? (
                         <YouTubeVideoCard 
                             video={video} 
-                            onVideoClick={onVideoClick} 
+                            onVideoClick={onVideoClick}
+                            isPlaying={playingVideoId === video.id}
+                            isFocused={focusedVideoId === video.id}
                         />
                     ) : (
-                        <VideoCard video={video} onClick={() => onVideoClick(video)} />
+                        <VideoCard video={video} onClick={() => onVideoClick(video)} isFocused={focusedVideoId === video.id} isPlaying={playingVideoId === video.id} />
                     )}
                 </Grid>
             ))}

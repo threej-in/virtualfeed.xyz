@@ -10,6 +10,8 @@ import { Video } from '../../types/Video';
 interface VideoCardProps {
     video: Video;
     onClick: () => void;
+    isFocused?: boolean;
+    isPlaying?: boolean;
 }
 
 // Simple styled components for VideoCard
@@ -25,8 +27,15 @@ const StyledCard = styled(Card)(({ theme }) => ({
         transform: 'translateY(-4px)',
         boxShadow: '0 6px 12px rgba(0, 0, 0, 0.3)'
     },
+    // Mobile TikTok-like styling
     [theme.breakpoints.down('sm')]: {
-        borderRadius: '6px',
+        borderRadius: 0,
+        height: 'auto',
+        minHeight: '100vh', // Full viewport height minus header
+        '&:hover': {
+            transform: 'none',
+            boxShadow: 'none'
+        },
     },
 }));
 
@@ -67,7 +76,7 @@ const ThumbnailOverlay = styled(Box)(({ theme }) => ({
     },
 }));
 
-const VideoCard: React.FC<VideoCardProps> = ({ video, onClick }) => {
+const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, isFocused = false, isPlaying = false }) => {
     const [imageLoading, setImageLoading] = useState(true);
     const [thumbnailUrl, setThumbnailUrl] = useState<string>(video.thumbnailUrl || '');
     const [retryCount, setRetryCount] = useState(0);
@@ -254,8 +263,13 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick }) => {
                 {/* Single container for both skeleton and image to ensure consistent sizing */}
                 <Box sx={{
                     position: 'relative',
-                    paddingTop: '177.78%', // 9:16 aspect ratio like YouTube Shorts
+                    paddingTop: { xs: '177.78%', sm: '177.78%' }, // 9:16 aspect ratio like YouTube Shorts
                     overflow: 'hidden',
+                    // Mobile: full height
+                    '@media (max-width: 600px)': {
+                        paddingTop: '100vh',
+                        height: '100vh',
+                    },
                 }}>
                     {/* Skeleton overlay */}
                     {imageLoading && (
@@ -290,42 +304,94 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick }) => {
                         </>
                     )}
                     
-                    {/* Actual image */}
-                    <img
-                        src={thumbnailUrl}
-                        alt={video.title}
-                        ref={imageRef}
-                        style={{
-                            display: imageLoading ? 'none' : 'block',
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '100%',
-                            height: '100%',
-                            objectFit: 'cover',
-                            objectPosition: 'center',
-                            filter: video.nsfw ? 'blur(10px)' : 'none',
-                            transition: 'filter 0.3s ease'
-                        }}
-                        onLoad={() => setImageLoading(false)}
-                        onError={handleImageError}
-                        loading="lazy"
-                    />
+                    {/* Show video when playing, image when not */}
+                    {isPlaying ? (
+                        <video
+                            src={video.videoUrl}
+                            autoPlay
+                            muted
+                            loop
+                            style={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                width: '100%',
+                                height: '100%',
+                                objectFit: 'cover',
+                                objectPosition: 'center',
+                                filter: video.nsfw ? 'blur(10px)' : 'none',
+                            }}
+                        />
+                    ) : (
+                        <img
+                            src={thumbnailUrl}
+                            alt={video.title}
+                            ref={imageRef}
+                            style={{
+                                display: imageLoading ? 'none' : 'block',
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                width: '100%',
+                                height: '100%',
+                                objectFit: 'cover',
+                                objectPosition: 'center',
+                                filter: video.nsfw ? 'blur(10px)' : 'none',
+                                transition: 'filter 0.3s ease'
+                            }}
+                            onLoad={() => setImageLoading(false)}
+                            onError={handleImageError}
+                            loading="lazy"
+                        />
+                    )}
                 </Box>
-                <PlayOverlay>
-                    <Box sx={{
-                        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                        borderRadius: '50%',
-                        width: { xs: '40px', sm: '50px' },
-                        height: { xs: '40px', sm: '50px' },
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        boxShadow: '0 0 15px rgba(0, 0, 0, 0.3)'
-                    }}>
-                        <PlayArrowIcon sx={{ fontSize: { xs: 28, sm: 36 }, color: 'white', opacity: 0.9 }} />
-                    </Box>
-                </PlayOverlay>
+                {/* Play overlay - only show when not playing */}
+                {!isPlaying && (
+                    <PlayOverlay>
+                        <Box sx={{
+                            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                            borderRadius: '50%',
+                            width: { xs: '40px', sm: '50px' },
+                            height: { xs: '40px', sm: '50px' },
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            boxShadow: '0 0 15px rgba(0, 0, 0, 0.3)'
+                        }}>
+                            <PlayArrowIcon sx={{ fontSize: { xs: 28, sm: 36 }, color: 'white', opacity: 0.9 }} />
+                        </Box>
+                    </PlayOverlay>
+                )}
+
+                {/* Focus indicator - shows when video is in viewport center */}
+                {isFocused && (
+                    <Box
+                        sx={{
+                            position: 'absolute',
+                            top: '10px',
+                            right: '10px',
+                            backgroundColor: 'rgba(0, 255, 0, 0.8)',
+                            borderRadius: '50%',
+                            width: 12,
+                            height: 12,
+                            animation: 'pulse 2s infinite',
+                            '@keyframes pulse': {
+                                '0%': {
+                                    transform: 'scale(1)',
+                                    opacity: 1,
+                                },
+                                '50%': {
+                                    transform: 'scale(1.2)',
+                                    opacity: 0.7,
+                                },
+                                '100%': {
+                                    transform: 'scale(1)',
+                                    opacity: 1,
+                                },
+                            },
+                        }}
+                    />
+                )}
                 
                 <ThumbnailOverlay>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -395,7 +461,13 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick }) => {
             
             <CardContent sx={{ 
                 p: 1, 
-                '&:last-child': { pb: 1 } 
+                '&:last-child': { pb: 1 },
+                // Mobile: minimal content area
+                '@media (max-width: 600px)': {
+                    p: 0,
+                    '&:last-child': { pb: 0 },
+                    display: 'none', // Hide content area on mobile for TikTok-like experience
+                }
             }}>
                 <Typography 
                     variant="body2" 

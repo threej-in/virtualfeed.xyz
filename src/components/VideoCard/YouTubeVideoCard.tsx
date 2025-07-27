@@ -24,12 +24,16 @@ interface YouTubeVideoCardProps {
   video: Video;
   onVideoClick: (video: Video) => void;
   isLoading?: boolean;
+  isPlaying?: boolean;
+  isFocused?: boolean;
 }
 
 const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
   video,
   onVideoClick,
   isLoading = false,
+  isPlaying = false,
+  isFocused = false,
 }) => {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
@@ -41,6 +45,39 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
   const handleImageError = () => {
     setImageError(true);
     setImageLoaded(true);
+  };
+
+  // Function to get the best quality thumbnail
+  const getBestThumbnail = (video: Video): string => {
+    if (!video.thumbnailUrl) return '';
+    
+    // If it's already a high-quality thumbnail, use it
+    if (video.thumbnailUrl.includes('maxres') || video.thumbnailUrl.includes('hq')) {
+      return video.thumbnailUrl;
+    }
+    
+    // Try to get maxres thumbnail by replacing URL parts
+    const url = video.thumbnailUrl;
+    if (url.includes('default.jpg')) {
+      return url.replace('default.jpg', 'maxresdefault.jpg');
+    }
+    if (url.includes('mqdefault.jpg')) {
+      return url.replace('mqdefault.jpg', 'maxresdefault.jpg');
+    }
+    if (url.includes('hqdefault.jpg')) {
+      return url.replace('hqdefault.jpg', 'maxresdefault.jpg');
+    }
+    
+    return video.thumbnailUrl;
+  };
+
+  // Function to get YouTube embed URL
+  const getYouTubeEmbedUrl = (video: Video): string => {
+    const videoId = video.metadata?.youtubeId || video.videoUrl?.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/)?.[1];
+    if (videoId) {
+      return `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1&controls=1`;
+    }
+    return video.videoUrl || '';
   };
 
   const formatNumber = (num: number): string => {
@@ -74,7 +111,19 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
           },
         }}
       >
-        <Box sx={{ position: 'relative', paddingTop: '177.78%' }}>
+        <Box sx={{ 
+          position: 'relative', 
+          paddingTop: '177.78%',
+          // Ensure consistent dimensions
+          width: '100%',
+          height: 0,
+          overflow: 'hidden',
+          // Mobile: full height
+          '@media (max-width: 600px)': {
+            paddingTop: '100vh',
+            height: 'calc(100vh - 80px)',
+          },
+        }}>
           <Skeleton
             variant="rectangular"
             width="100%"
@@ -84,6 +133,10 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
               top: 0,
               left: 0,
               backgroundColor: 'rgba(255, 255, 255, 0.1)',
+              // Ensure skeleton maintains same aspect ratio
+              aspectRatio: '9/16',
+              minHeight: '100%',
+              minWidth: '100%',
             }}
           />
         </Box>
@@ -120,11 +173,33 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
             transform: 'translateY(-4px)',
             boxShadow: '0 8px 25px rgba(0, 0, 0, 0.3)',
           },
+          // Mobile TikTok-like styling
+          '@media (max-width: 600px)': {
+            borderRadius: 0,
+            height: 'auto',
+            minHeight: 'calc(100vh - 80px)',
+            '&:hover': {
+              transform: 'none',
+              boxShadow: 'none'
+            },
+          },
         }}
         onClick={() => onVideoClick(video)}
       >
-        <Box sx={{ position: 'relative', paddingTop: '177.78%' }}>
-          {!imageLoaded && (
+        <Box sx={{ 
+          position: 'relative', 
+          paddingTop: '177.78%',
+          // Ensure consistent dimensions
+          width: '100%',
+          height: 0,
+          overflow: 'hidden',
+          // Mobile: full height
+          '@media (max-width: 600px)': {
+            paddingTop: '100vh',
+            height: 'calc(100vh - 80px)',
+          },
+        }}>
+          {!imageLoaded && !isPlaying && (
             <Skeleton
               variant="rectangular"
               width="100%"
@@ -134,53 +209,123 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
                 top: 0,
                 left: 0,
                 backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                // Ensure skeleton maintains same aspect ratio
+                aspectRatio: '9/16',
+                minHeight: '100%',
+                minWidth: '100%',
               }}
             />
           )}
-          <CardMedia
-            component="img"
-            image={
-              imageError
-                ? 'https://via.placeholder.com/400x225/1a1a1a/ffffff?text=YouTube+Video'
-                : video.thumbnailUrl
-            }
-            alt={video.title}
-            sx={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              display: imageLoaded ? 'block' : 'none',
-            }}
-            onLoad={handleImageLoad}
-            onError={handleImageError}
-          />
           
-          {/* Play button overlay */}
-          <Box
-            sx={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              backgroundColor: 'rgba(0, 0, 0, 0.7)',
-              borderRadius: '50%',
-              width: 60,
-              height: 60,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              opacity: 0,
-              transition: 'opacity 0.2s ease-in-out',
-              '&:hover': {
-                opacity: 1,
-              },
-            }}
-          >
-            <PlayIcon sx={{ color: 'white', fontSize: 30 }} />
-          </Box>
+          {/* Show embedded video when playing */}
+          {isPlaying ? (
+            <Box
+              component="iframe"
+              src={getYouTubeEmbedUrl(video)}
+              title={video.title}
+              frameBorder="0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              sx={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100vh',
+                maxHeight: '100vh',
+                border: 'none',
+                borderRadius: 'inherit',
+              }}
+            />
+          ) : (
+            <CardMedia
+              component="img"
+              image={
+                imageError
+                  ? 'https://via.placeholder.com/400x720/1a1a1a/ffffff?text=YouTube+Video'
+                  : getBestThumbnail(video)
+              }
+              alt={video.title}
+              sx={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                objectPosition: 'center',
+                display: imageLoaded ? 'block' : 'none',
+                // Ensure consistent aspect ratio and prevent layout shifts
+                minHeight: '100%',
+                minWidth: '100%',
+                // Force aspect ratio consistency
+                aspectRatio: '9/16',
+                // Prevent image distortion
+                '& img': {
+                  objectFit: 'cover',
+                  objectPosition: 'center',
+                },
+              }}
+              onLoad={handleImageLoad}
+              onError={handleImageError}
+            />
+          )}
+          
+          {/* Play button overlay - only show when not playing */}
+          {!isPlaying && (
+            <Box
+              sx={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                borderRadius: '50%',
+                width: 60,
+                height: 60,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: 0,
+                transition: 'opacity 0.2s ease-in-out',
+                '&:hover': {
+                  opacity: 1,
+                },
+              }}
+            >
+              <PlayIcon sx={{ color: 'white', fontSize: 30 }} />
+            </Box>
+          )}
+
+          {/* Focus indicator - shows when video is in viewport center */}
+          {isFocused && !isPlaying && (
+            <Box
+              sx={{
+                position: 'absolute',
+                top: '10px',
+                right: '10px',
+                backgroundColor: 'rgba(0, 255, 0, 0.8)',
+                borderRadius: '50%',
+                width: 12,
+                height: 12,
+                animation: 'pulse 2s infinite',
+                '@keyframes pulse': {
+                  '0%': {
+                    transform: 'scale(1)',
+                    opacity: 1,
+                  },
+                  '50%': {
+                    transform: 'scale(1.2)',
+                    opacity: 0.7,
+                  },
+                  '100%': {
+                    transform: 'scale(1)',
+                    opacity: 1,
+                  },
+                },
+              }}
+            />
+          )}
 
           {/* Stats overlay */}
           <Box
@@ -260,7 +405,15 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
           </Box>
         </Box>
 
-        <CardContent sx={{ flexGrow: 1, p: 1, '&:last-child': { pb: 1 } }}>
+        <CardContent sx={{ 
+          flexGrow: 1, 
+          p: 1, 
+          '&:last-child': { pb: 1 },
+          // Mobile: hide content area for TikTok-like experience
+          '@media (max-width: 600px)': {
+            display: 'none',
+          }
+        }}>
           <Typography
             variant="body2"
             sx={{

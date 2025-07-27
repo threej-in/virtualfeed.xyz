@@ -10,7 +10,10 @@ import {
   Alert,
   Snackbar,
   Button,
+  IconButton,
+  Drawer,
 } from '@mui/material';
+import { Menu as MenuIcon, Close as CloseIcon } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import VideoGrid from './components/VideoGrid/VideoGrid';
 import SearchBar from './components/SearchBar/SearchBar';
@@ -27,8 +30,8 @@ import { theme } from './theme';
 
 const StyledContainer = styled(Container)(({ theme }) => ({
   position: 'relative',
-  minHeight: '100vh',
-  paddingBottom: theme.spacing(2),
+  height: '100vh',
+  paddingBottom: 0,
   paddingLeft: theme.spacing(0),
   paddingRight: theme.spacing(0),
   paddingTop: 0,
@@ -69,14 +72,14 @@ const Header = styled(Box)(({ theme }) => ({
   [theme.breakpoints.down('xs')]: {
     flexDirection: 'column',
     alignItems: 'stretch',
-    gap: theme.spacing(0.5),
-    padding: theme.spacing(0.5, 0.75),
+    gap: theme.spacing(0.25),
+    padding: theme.spacing(0.25, 0.5),
   },
   [theme.breakpoints.down('md')]: {
     flexDirection: 'column',
     alignItems: 'stretch',
-    gap: theme.spacing(0.75),
-    padding: theme.spacing(0.75, 1),
+    gap: theme.spacing(0.5),
+    padding: theme.spacing(0.5, 0.75),
   },
 }));
 
@@ -136,16 +139,22 @@ function App() {
     sortBy: 'createdAt' as 'createdAt' | 'views' | 'likes',
     order: 'desc' as 'asc' | 'desc',
     search: undefined as string | undefined,
-    platform: 'reddit', // Default to reddit platform
+    platform: '', // Default to show all platforms
     showNsfw: false,
     trending: undefined as '24h' | '48h' | '1w' | undefined, // No trending filter by default - show recent videos
   });
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [isFallbackContent, setIsFallbackContent] = useState(false);
   const [isVideoSubmissionOpen, setIsVideoSubmissionOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [playingVideoId, setPlayingVideoId] = useState<number | null>(null);
+  const [focusedVideoId, setFocusedVideoId] = useState<number | null>(null);
 
   // Observer for infinite scrolling
   const observer = useRef<IntersectionObserver | null>(null);
+  
+  // Observer for video focus/autoplay
+  const videoFocusObserver = useRef<IntersectionObserver | null>(null);
 
   // Function to load videos (either initial load or more videos)
   const loadVideos = useCallback(async (isInitialLoad: boolean = false, page: number = 1) => {
@@ -262,12 +271,72 @@ function App() {
       if (entries[0].isIntersecting && hasMore) {
         loadMoreVideos();
       }
-    }, { rootMargin: '100px' });
+    }, { 
+      rootMargin: '200px', // Increased margin for snap scrolling
+      threshold: 0.1 // Lower threshold to trigger earlier
+    });
     
     if (node) {
       observer.current.observe(node);
     }
   }, [loading, initialLoading, hasMore, loadMoreVideos]);
+
+  // Set up intersection observer for video focus/autoplay
+  useEffect(() => {
+    videoFocusObserver.current = new IntersectionObserver(
+      (entries) => {
+        // Find the video that is most in focus (highest intersection ratio)
+        let mostFocusedVideoId: number | null = null;
+        let highestRatio = 0;
+        
+        entries.forEach((entry) => {
+          if (entry.isIntersecting && entry.intersectionRatio > highestRatio) {
+            const videoId = parseInt(entry.target.getAttribute('data-video-id') || '0');
+            highestRatio = entry.intersectionRatio;
+            mostFocusedVideoId = videoId;
+          }
+        });
+        
+        // Stop all videos first, then start the most focused video
+        if (mostFocusedVideoId && highestRatio >= 0.7) {
+          setPlayingVideoId(mostFocusedVideoId);
+          setFocusedVideoId(mostFocusedVideoId);
+        } else {
+          setPlayingVideoId(null);
+          setFocusedVideoId(null);
+        }
+      },
+      { 
+        threshold: [0.1, 0.3, 0.5, 0.7, 0.9], // Multiple thresholds for better detection
+        rootMargin: '-10% 0px -10% 0px' // Only trigger when video is in center 80% of viewport
+      }
+    );
+
+    return () => {
+      if (videoFocusObserver.current) {
+        videoFocusObserver.current.disconnect();
+      }
+    };
+  }, [videos]);
+
+  // Add scroll event listener as backup for infinite scrolling with snap scrolling
+  useEffect(() => {
+    const handleScroll = () => {
+      if (loading || !hasMore) return;
+      
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+      const windowHeight = window.innerHeight;
+      const documentHeight = document.documentElement.scrollHeight;
+      
+      // Load more when user is near bottom (within 300px)
+      if (scrollTop + windowHeight >= documentHeight - 300) {
+        loadMoreVideos();
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [loading, hasMore, loadMoreVideos]);
 
   const handleSearch = (query: string) => {
     setFilterValues(prev => ({ ...prev, search: query }));
@@ -355,6 +424,23 @@ function App() {
               display: { xs: isSearchExpanded ? 'none' : 'flex', sm: 'flex' },
               paddingLeft: { md: 3 } // Align with sidebar padding
             }}>
+              {/* Mobile Menu Button */}
+              <IconButton
+                onClick={() => setIsSidebarOpen(true)}
+                sx={{
+                  display: { xs: 'flex', md: 'none' },
+                  mr: 1,
+                  color: 'rgba(255, 255, 255, 0.8)',
+                  padding: { xs: 0.5, sm: 1 },
+                  '&:hover': {
+                    color: 'white',
+                    background: 'rgba(255, 255, 255, 0.1)',
+                  },
+                }}
+              >
+                <MenuIcon sx={{ fontSize: { xs: '1.2rem', sm: '1.5rem' } }} />
+              </IconButton>
+              
               <Typography 
                 variant="h5" 
                 onClick={() => {
@@ -380,6 +466,7 @@ function App() {
                   WebkitTextFillColor: 'transparent',
                   mr: { xs: 0, md: 1 },
                   cursor: 'pointer',
+                  fontSize: { xs: '1.2rem', sm: '1.5rem', md: '1.5rem' },
                   '&:hover': {
                     opacity: 0.85,
                     transform: 'scale(1.03)',
@@ -452,20 +539,49 @@ function App() {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.3 }}
             >
-              <Box sx={{ display: 'flex', minHeight: 'calc(100vh - 120px)' }}>
-                {/* Sidebar */}
-                <Sidebar
-                  currentPlatform={filterValues.platform || ''}
-                  onPlatformChange={handlePlatformChange}
-                  onVideoSubmission={() => setIsVideoSubmissionOpen(true)}
-                />
+              <Box sx={{ 
+                display: 'flex', 
+                height: 'calc(100vh - 40px)',
+                flexDirection: { xs: 'column', md: 'row' }
+              }}>
+                {/* Desktop Sidebar */}
+                <Box sx={{ display: { xs: 'none', md: 'block' } }}>
+                  <Sidebar
+                    currentPlatform={filterValues.platform || ''}
+                    onPlatformChange={handlePlatformChange}
+                    onVideoSubmission={() => setIsVideoSubmissionOpen(true)}
+                  />
+                </Box>
                 
-                                {/* Main Content Area */}
-                <Box sx={{ flex: 1, p: 3, marginLeft: { md: '250px' } }}>
+                {/* Main Content Area */}
+                <Box sx={{ 
+                  flex: 1, 
+                  p: { xs: 0, md: 3 }, 
+                  marginLeft: { md: '250px' },
+                  width: { xs: '100%', md: 'auto' },
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column'
+                }}>
                   <VideoGrid
                     videos={videos}
-                    onVideoClick={(video) => setSelectedVideo(video)}
+                    onVideoClick={(video) => {
+                      if (video.platform === 'youtube') {
+                        // For YouTube videos, manually toggle playing state (override autoplay)
+                        setPlayingVideoId(playingVideoId === video.id ? null : video.id);
+                        setFocusedVideoId(playingVideoId === video.id ? null : video.id);
+                        setSelectedVideo(null); // Don't open popup for YouTube
+                      } else {
+                        // For Reddit videos, manually toggle popup (override autoplay)
+                        setSelectedVideo(selectedVideo?.id === video.id ? null : video);
+                        setPlayingVideoId(null); // Stop any playing YouTube video
+                        setFocusedVideoId(selectedVideo?.id === video.id ? null : video.id);
+                      }
+                    }}
                     lastVideoRef={lastVideoElementRef}
+                    playingVideoId={playingVideoId}
+                    focusedVideoId={focusedVideoId}
+                    videoFocusObserver={videoFocusObserver}
                     onResetFilters={() => {
                       // Reset all filters and return to homepage
                       setFilterValues({
@@ -473,7 +589,7 @@ function App() {
                         sortBy: 'createdAt',
                         order: 'desc',
                         search: '',
-                        platform: 'reddit',
+                        platform: '', // Show all platforms by default
                         showNsfw: false,
                         trending: undefined, // Show recent videos by default
                       });
@@ -491,41 +607,17 @@ function App() {
                     </Box>
                   )}
                   
-                  {/* No more videos message */}
-                  {!hasMore && videos.length > 0 && (
-                    <Box display="flex" justifyContent="center" p={4}>
-                      <Typography variant="body2" color="text.secondary">
-                        No more videos to load
-                      </Typography>
-                    </Box>
-                  )}
+                  {/* No more videos message removed - clean infinite scroll experience */}
                   
-                  {/* Manual load more button as fallback */}
-                  {hasMore && videos.length > 0 && !loading && (
-                    <Box display="flex" justifyContent="center" p={4}>
-                      <Button 
-                        variant="outlined" 
-                        color="primary" 
-                        onClick={() => loadMoreVideos()}
-                      >
-                        Load More
-                      </Button>
-                    </Box>
-                  )}
+                  {/* Manual load more button removed - using infinite scroll instead */}
                 </Box>
               </Box>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Video Player with swipe functionality */}
-        {selectedVideo?.platform === 'youtube' ? (
-          <YouTubeVideoPlayer
-            video={selectedVideo}
-            open={!!selectedVideo}
-            onClose={() => setSelectedVideo(null)}
-          />
-        ) : (
+        {/* Video Player with swipe functionality - only for Reddit videos */}
+        {selectedVideo && selectedVideo.platform !== 'youtube' && (
           <VideoPlayer
             videos={videos}
             initialVideoIndex={selectedVideo ? videos.findIndex(v => v.id === selectedVideo.id) : 0}
@@ -542,6 +634,87 @@ function App() {
           onSubmit={handleSubmitVideo}
         />
 
+        {/* Mobile Sidebar Drawer */}
+        <Drawer
+          anchor="left"
+          open={isSidebarOpen}
+          onClose={() => setIsSidebarOpen(false)}
+          sx={{
+            display: { xs: 'block', md: 'none' },
+            '& .MuiDrawer-paper': {
+              width: '100%',
+              maxWidth: '320px',
+              background: 'linear-gradient(135deg, rgba(19, 19, 47, 0.98) 0%, rgba(25, 25, 60, 0.95) 100%)',
+              backdropFilter: 'blur(25px)',
+              border: 'none',
+              boxShadow: '8px 0 30px rgba(0, 0, 0, 0.4)',
+              borderRight: '1px solid rgba(108, 99, 255, 0.2)',
+            },
+          }}
+        >
+          <Box sx={{ 
+            height: '100%', 
+            display: 'flex', 
+            flexDirection: 'column',
+            background: 'linear-gradient(180deg, rgba(108, 99, 255, 0.05) 0%, transparent 50%, rgba(255, 101, 132, 0.05) 100%)'
+          }}>
+            {/* Header with Close Button */}
+            <Box sx={{ 
+              p: 3, 
+              pb: 2,
+              borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+              background: 'rgba(255, 255, 255, 0.02)'
+            }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography 
+                  variant="h6" 
+                  sx={{ 
+                    fontWeight: 700,
+                    background: 'linear-gradient(45deg, #6c63ff, #ff6584)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    fontSize: '1.25rem'
+                  }}
+                >
+                  Menu
+                </Typography>
+                <IconButton
+                  onClick={() => setIsSidebarOpen(false)}
+                  sx={{
+                    color: 'rgba(255, 255, 255, 0.7)',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    '&:hover': {
+                      color: 'white',
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      borderColor: 'rgba(255, 255, 255, 0.2)',
+                      transform: 'scale(1.05)',
+                    },
+                    transition: 'all 0.2s ease-in-out'
+                  }}
+                >
+                  <CloseIcon />
+                </IconButton>
+              </Box>
+            </Box>
+            
+            {/* Sidebar Content */}
+            <Box sx={{ flex: 1, p: 3, pt: 2 }}>
+              <Sidebar
+                currentPlatform={filterValues.platform || ''}
+                onPlatformChange={(platform) => {
+                  handlePlatformChange(platform);
+                  setIsSidebarOpen(false); // Close drawer after selection
+                }}
+                onVideoSubmission={() => {
+                  setIsVideoSubmissionOpen(true);
+                  setIsSidebarOpen(false); // Close drawer after clicking submit
+                }}
+                isMobileDrawer={true}
+              />
+            </Box>
+          </Box>
+        </Drawer>
 
       </StyledContainer>
     </ThemeProvider>

@@ -18,11 +18,12 @@ interface SidebarProps {
   currentPlatform: string;
   onPlatformChange: (platform: string) => void;
   onVideoSubmission: () => void;
+  isMobileDrawer?: boolean;
 }
 
 const StyledSidebar = styled(Box)(({ theme }) => ({
   width: 250,
-  height: 'calc(100vh - 50px)', // Subtract header height
+  height: 'calc(100vh - 80px)', // Subtract header height
   background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%)',
   borderRight: '1px solid rgba(255, 255, 255, 0.1)',
   backdropFilter: 'blur(20px)',
@@ -31,8 +32,9 @@ const StyledSidebar = styled(Box)(({ theme }) => ({
   flexDirection: 'column',
   gap: theme.spacing(3),
   position: 'fixed',
-  top: 58, // Account for header height
+  top: 80, // Account for header height
   overflowY: 'auto',
+  zIndex: 1000,
   '&::-webkit-scrollbar': {
     width: '6px',
   },
@@ -45,6 +47,69 @@ const StyledSidebar = styled(Box)(({ theme }) => ({
     borderRadius: '3px',
     '&:hover': {
       background: 'rgba(255, 255, 255, 0.3)',
+    },
+  },
+  // Mobile responsive styles - only apply when not in drawer
+  '&.mobile-drawer': {
+    width: '100%',
+    height: 'auto',
+    position: 'static',
+    top: 'auto',
+    borderRight: 'none',
+    padding: 0,
+    gap: theme.spacing(3),
+    background: 'transparent',
+    overflowY: 'visible',
+    '& .platform-buttons': {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: theme.spacing(2),
+    },
+    '& .platform-button': {
+      height: 56,
+      fontSize: '1rem',
+      fontWeight: 600,
+      borderRadius: 12,
+      border: '2px solid rgba(255, 255, 255, 0.1)',
+      background: 'rgba(255, 255, 255, 0.03)',
+      backdropFilter: 'blur(10px)',
+      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+      color: 'rgba(255, 255, 255, 0.9)',
+      textTransform: 'none',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'flex-start',
+      '&:hover': {
+        background: 'rgba(255, 255, 255, 0.08)',
+        borderColor: 'rgba(255, 255, 255, 0.2)',
+        transform: 'translateY(-2px)',
+        boxShadow: '0 8px 25px rgba(0, 0, 0, 0.2)',
+        color: 'white',
+      },
+      '&.active': {
+        background: 'linear-gradient(135deg, rgba(108, 99, 255, 0.2), rgba(255, 101, 132, 0.2))',
+        borderColor: 'rgba(108, 99, 255, 0.4)',
+        boxShadow: '0 8px 25px rgba(108, 99, 255, 0.3)',
+        color: 'white',
+      },
+      '& .MuiButton-startIcon': {
+        marginRight: '12px',
+        fontSize: '1.5rem',
+      },
+    },
+    '& .submit-section': {
+      background: 'rgba(255, 255, 255, 0.03)',
+      borderRadius: 16,
+      padding: theme.spacing(3),
+      border: '1px solid rgba(255, 255, 255, 0.1)',
+      backdropFilter: 'blur(10px)',
+    },
+    '& .stats-section': {
+      background: 'rgba(255, 255, 255, 0.02)',
+      borderRadius: 16,
+      padding: theme.spacing(3),
+      border: '1px solid rgba(255, 255, 255, 0.08)',
+      backdropFilter: 'blur(10px)',
     },
   },
 }));
@@ -91,6 +156,15 @@ const PlatformButton = styled(Button)<{ active?: boolean }>(({ theme, active }) 
     marginRight: theme.spacing(1.5),
     fontSize: '1.5rem',
   },
+  // Mobile responsive styles
+  [theme.breakpoints.down('md')]: {
+    height: 48,
+    fontSize: '1rem',
+    '& .MuiButton-startIcon': {
+      marginRight: theme.spacing(1),
+      fontSize: '1.3rem',
+    },
+  },
 }));
 
 const SubmitButton = styled(Button)(({ theme }) => ({
@@ -125,52 +199,73 @@ const SubmitButton = styled(Button)(({ theme }) => ({
     marginRight: theme.spacing(1.5),
     fontSize: '1.5rem',
   },
+  // Mobile responsive styles
+  [theme.breakpoints.down('md')]: {
+    height: 48,
+    fontSize: '1.1rem',
+    '& .MuiButton-startIcon': {
+      marginRight: theme.spacing(1),
+      fontSize: '1.3rem',
+    },
+  },
 }));
 
 const Sidebar: React.FC<SidebarProps> = ({
   currentPlatform,
   onPlatformChange,
   onVideoSubmission,
+  isMobileDrawer = false,
 }) => {
   const theme = useTheme();
 
   return (
-    <StyledSidebar>
+    <StyledSidebar className={isMobileDrawer ? 'mobile-drawer' : ''}>
       {/* Platform Selection */}
-      <Box>        
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <PlatformButton
-            variant="outlined"
-            startIcon={<RedditIcon sx={{ color: '#FF4500' }} />}
-            onClick={() => onPlatformChange('reddit')}
-            active={currentPlatform === 'reddit'}
-          >
-            Reddit Videos
-          </PlatformButton>
-          
-          <PlatformButton
-            variant="outlined"
-            startIcon={<YouTubeIcon sx={{ color: '#FF0000' }} />}
-            onClick={() => onPlatformChange('youtube')}
-            active={currentPlatform === 'youtube'}
-          >
-            YouTube
-          </PlatformButton>
-        </Box>
+      <Box className="platform-buttons">        
+        <PlatformButton
+          variant="outlined"
+          startIcon={<TrendingIcon sx={{ color: '#6c63ff' }} />}
+          onClick={() => onPlatformChange('')}
+          active={currentPlatform === ''}
+          className={currentPlatform === '' ? 'platform-button active' : 'platform-button'}
+        >
+          All Videos
+        </PlatformButton>
+        
+        <PlatformButton
+          variant="outlined"
+          startIcon={<RedditIcon sx={{ color: '#FF4500' }} />}
+          onClick={() => onPlatformChange('reddit')}
+          active={currentPlatform === 'reddit'}
+          className={currentPlatform === 'reddit' ? 'platform-button active' : 'platform-button'}
+        >
+          Reddit Videos
+        </PlatformButton>
+        
+        <PlatformButton
+          variant="outlined"
+          startIcon={<YouTubeIcon sx={{ color: '#FF0000' }} />}
+          onClick={() => onPlatformChange('youtube')}
+          active={currentPlatform === 'youtube'}
+          className={currentPlatform === 'youtube' ? 'platform-button active' : 'platform-button'}
+        >
+          YouTube
+        </PlatformButton>
       </Box>
 
       <Divider sx={{ borderColor: 'rgba(255, 255, 255, 0.1)' }} />
 
       {/* Submit Video */}
-      <Box>
+      <Box className="submit-section">
         <Typography
           variant="subtitle2"
           sx={{
-            color: 'rgba(255, 255, 255, 0.8)',
-            fontWeight: 600,
+            color: 'rgba(255, 255, 255, 0.9)',
+            fontWeight: 700,
             mb: 2,
             textTransform: 'uppercase',
             letterSpacing: '0.5px',
+            fontSize: { xs: '0.875rem', md: '0.75rem' },
           }}
         >
           Contribute
@@ -178,30 +273,49 @@ const Sidebar: React.FC<SidebarProps> = ({
         
         <SubmitButton
           variant="contained"
-          startIcon={<AddIcon />}
+          startIcon={<AddIcon sx={{ fontSize: { xs: '1.25rem', md: '1rem' } }} />}
           onClick={onVideoSubmission}
+          sx={{
+            width: '100%',
+            height: { xs: 48, md: 40 },
+            fontSize: { xs: '1rem', md: '0.9rem' },
+            fontWeight: 600,
+            borderRadius: { xs: 12, md: 10 },
+            background: 'linear-gradient(135deg, #6c63ff, #ff6584)',
+            '&:hover': {
+              background: 'linear-gradient(135deg, #5a52d5, #e55a75)',
+              transform: 'translateY(-2px)',
+              boxShadow: '0 8px 25px rgba(108, 99, 255, 0.4)',
+            },
+            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          }}
         >
           Submit Video
         </SubmitButton>
       </Box>
 
       {/* Stats or Info */}
-      <Box sx={{ mt: 'auto', pt: 2 }}>
+      <Box sx={{ mt: 'auto', pt: 2 }} className="stats-section">
         <Box
           sx={{
-            p: 2,
-            borderRadius: 2,
-            background: 'rgba(255, 255, 255, 0.03)',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
+            p: { xs: 3, md: 2 },
+            borderRadius: { xs: 3, md: 2 },
+            background: 'transparent',
+            border: 'none',
           }}
         >
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-            <TrendingIcon sx={{ color: '#6c63ff', fontSize: 20, mr: 1 }} />
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+            <TrendingIcon sx={{ 
+              color: '#6c63ff', 
+              fontSize: { xs: 24, md: 20 }, 
+              mr: 1.5 
+            }} />
             <Typography
               variant="subtitle2"
               sx={{
-                color: 'rgba(255, 255, 255, 0.8)',
-                fontWeight: 600,
+                color: 'rgba(255, 255, 255, 0.9)',
+                fontWeight: 700,
+                fontSize: { xs: '1rem', md: '0.875rem' },
               }}
             >
               Trending Now
@@ -210,8 +324,9 @@ const Sidebar: React.FC<SidebarProps> = ({
           <Typography
             variant="body2"
             sx={{
-              color: 'rgba(255, 255, 255, 0.6)',
-              lineHeight: 1.4,
+              color: 'rgba(255, 255, 255, 0.7)',
+              lineHeight: 1.5,
+              fontSize: { xs: '0.875rem', md: '0.75rem' },
             }}
           >
             Discover the latest AI-generated videos from Reddit and YouTube

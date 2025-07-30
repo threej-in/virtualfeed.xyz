@@ -12,6 +12,7 @@ interface VideoCardProps {
     onClick: () => void;
     isFocused?: boolean;
     isPlaying?: boolean;
+    isLargeDevice?: boolean;
 }
 
 // Simple styled components for VideoCard
@@ -76,7 +77,7 @@ const ThumbnailOverlay = styled(Box)(({ theme }) => ({
     },
 }));
 
-const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, isFocused = false, isPlaying = false }) => {
+const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, isFocused = false, isPlaying = false, isLargeDevice = false }) => {
     const [imageLoading, setImageLoading] = useState(true);
     const [thumbnailUrl, setThumbnailUrl] = useState<string>(video.thumbnailUrl || '');
     const [retryCount, setRetryCount] = useState(0);
@@ -363,8 +364,8 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, isFocused = false
                     </PlayOverlay>
                 )}
 
-                {/* Focus indicator - shows when video is in viewport center */}
-                {isFocused && (
+                {/* Focus indicator - shows when video is in viewport center (only on mobile) */}
+                {isFocused && !isLargeDevice && (
                     <Box
                         sx={{
                             position: 'absolute',

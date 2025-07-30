@@ -56,6 +56,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
     const [videoQuality, setVideoQuality] = useState<string>('480'); // Default to 480p for stability
     const [isBuffering, setIsBuffering] = useState(false);
     const [showQualityMenu, setShowQualityMenu] = useState(false);
+    const [youtubeLoading, setYoutubeLoading] = useState(false);
     // const [isInitialLoading, setIsInitialLoading] = useState(true);
     // const [networkSpeed, setNetworkSpeed] = useState<number | null>(null); // Kept for compatibility
     
@@ -68,6 +69,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
     useEffect(() => {
         if (initialVideoIndex >= 0 && initialVideoIndex < videos.length) {
             setCurrentIndex(initialVideoIndex);
+            // Reset loading states when video changes
+            const currentVideo = videos[initialVideoIndex];
+            if (currentVideo?.platform === 'youtube') {
+                setYoutubeLoading(true);
+            } else {
+                setIsBuffering(true);
+            }
         }
     }, [initialVideoIndex, videos]);
     
@@ -89,6 +97,27 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         // Use the selected quality directly for stability
         return videoQuality;
     }, [videoQuality]);
+
+    // Get YouTube embed URL
+    const getYouTubeEmbedUrl = useCallback((video: Video) => {
+        const youtubeId = video.metadata?.youtubeId;
+        
+        if (youtubeId) {
+            const embedUrl = `https://www.youtube.com/embed/${youtubeId}?autoplay=1&mute=1&rel=0&modestbranding=1&controls=0&loop=1&playlist=${youtubeId}&disablekb=1&fs=0&iv_load_policy=3&showinfo=0&playsinline=1`;
+            return embedUrl;
+        }
+        
+        // Fallback to videoUrl if youtubeId is not available
+        if (video.videoUrl && video.videoUrl.includes('youtube.com')) {
+            const videoId = video.videoUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/)?.[1];
+            if (videoId) {
+                const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&rel=0&modestbranding=1&controls=0&loop=1&playlist=${videoId}&disablekb=1&fs=0&iv_load_policy=3&showinfo=0&playsinline=1`;
+                return embedUrl;
+            }
+        }
+        
+        return '';
+    }, []);
 
     // Get video URL for Reddit videos with multiple formats
     const getVideoUrl = useCallback((url: string) => {
@@ -140,17 +169,17 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         // Auto-play the video immediately
         const timer = setTimeout(() => {
             if (videoRef.current) {
-                videoRef.current.muted = true; // Temporarily mute to ensure autoplay works
+                // Ensure video is muted for autoplay to work on mobile
+                videoRef.current.muted = true;
+                videoRef.current.playsInline = true;
                 
                 // Add buffer management
                 videoRef.current.onwaiting = () => {
-                    console.log('Video is buffering...');
                     setIsBuffering(true);
                     // Don't reset isInitialLoading here - we want to keep track of initial load vs. subsequent buffering
                 };
                 
                 videoRef.current.oncanplay = () => {
-                    console.log('Video can play now');
                     setIsBuffering(false);
                     // setIsInitialLoading(false); // Mark initial loading as complete once video can play
                     measureNetworkSpeed();
@@ -167,6 +196,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                         setIsPlaying(true);
                         setIsBuffering(false);
                         
+                        // Keep muted for mobile autoplay compatibility
                         // Unmute after playback starts if it wasn't muted before
                         if (!isMuted) {
                             videoRef.current!.muted = false;
@@ -174,6 +204,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                     }).catch(err => {
                         console.error('Error playing video:', err);
                         setIsBuffering(false);
+                        // On mobile, if autoplay fails, we might need to handle it differently
+                        // For now, keep it muted and let user interaction trigger play
                     });
                 }
             }
@@ -501,8 +533,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
             PaperProps={{
                 sx: {
                     backgroundColor: '#000',
-                    height: '100%',
-                    maxHeight: '100vh',
+                    height: { xs: 'calc(100vh - 60px)', md: '100vh' },
+                    maxHeight: { xs: 'calc(100vh - 60px)', md: '100vh' },
                     margin: 0,
                     borderRadius: 0,
                     overflow: 'hidden'
@@ -513,7 +545,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                     m: 0,
                     width: '100%',
                     maxWidth: '100%',
-                    height: '100%'
+                    height: { xs: 'calc(100vh - 60px)', md: '100vh' },
+                    maxHeight: { xs: 'calc(100vh - 60px)', md: '100vh' }
                 }
             }}
         >
@@ -536,8 +569,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                         alignItems: 'center',
                         justifyContent: 'center',
                         overflow: 'hidden',
-                        // Optimize height for mobile devices
-                        height: { xs: 'calc(100vh - 80px)', md: '100%' },
+                        // Account for header height (60px) on mobile
+                        height: { xs: 'calc(100vh - 60px)', md: '100%' },
+                        maxHeight: { xs: 'calc(100vh - 60px)', md: '100vh' },
                         cursor: swipeDirection ? (swipeDirection === 'Left' ? 'e-resize' : 'w-resize') : 'default'
                     }}
                     onMouseMove={() => setShowControls(true)}
@@ -627,55 +661,136 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                         {/* Thumbnail display removed as requested */}
                                     </Box>
                                 )}
-                                <video
-                                    ref={videoRef}
-                                    style={{
-                                        width: '100%',
-                                        height: '100%',
-                                        objectFit: 'contain',
-                                        maxHeight: '100vh',
-                                        transition: 'filter 0.3s ease'
-                                    }}
-                                    src={getVideoUrl(currentVideo.videoUrl)}
-                                    playsInline
-                                    preload="auto"
-                                    autoPlay
-                                    loop={isLooping}
-                                    onTimeUpdate={handleTimeUpdate}
-                                    onPlay={() => setIsPlaying(true)}
-                                    onPause={() => setIsPlaying(false)}
-                                    onWaiting={() => {
-                                        setIsBuffering(true);
-                                    }}
-                                    onPlaying={() => {
-                                        setIsBuffering(false);
-                                    }}
-                                    onCanPlayThrough={() => {
-                                        setIsBuffering(false);
-                                    }}
-                                    onStalled={() => {
-                                        // Don't automatically switch quality on stall
-                                        // This prevents constant quality switching that causes poor UX
-                                        console.log('Video stalled - maintaining current quality for stability');
-                                    }}
-                                    onError={(e) => {
-                                        setIsBuffering(false);
-                                        console.error('Video playback error:', e);
-                                        // Only try one fallback quality to prevent constant switching
-                                        if (videoRef.current && currentVideo.videoUrl.includes('v.redd.it')) {
-                                            const videoId = currentVideo.videoUrl.match(/v\.redd\.it\/([^/?]+)/i)?.[1];
-                                            if (videoId && videoQuality !== '360') {
-                                                // Try 360p as a single fallback
-                                                setVideoQuality('360');
-                                                videoRef.current.src = `https://v.redd.it/${videoId}/DASH_360.mp4`;
-                                                videoRef.current.load();
+                                {currentVideo.platform === 'youtube' ? (
+                                    // YouTube video - use iframe
+                                    <>
+                                        {youtubeLoading && (
+                                            <Box
+                                                sx={{
+                                                    position: 'absolute',
+                                                    top: 0,
+                                                    left: 0,
+                                                    width: '100%',
+                                                    height: '100%',
+                                                    zIndex: 1,
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    backgroundColor: 'rgba(0,0,0,0.7)',
+                                                }}
+                                            >
+                                                <img
+                                                    src={loadingSpinnerUrl}
+                                                    alt="Loading..."
+                                                    style={{
+                                                        width: '80px',
+                                                        height: '80px',
+                                                    }}
+                                                />
+                                            </Box>
+                                        )}
+                                        {getYouTubeEmbedUrl(currentVideo) ? (
+                                            <iframe
+                                                src={getYouTubeEmbedUrl(currentVideo)}
+                                                style={{
+                                                    width: '100%',
+                                                    height: '100%',
+                                                    border: 'none',
+                                                    maxHeight: '100vh',
+                                                    transition: 'filter 0.3s ease'
+                                                }}
+                                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                                allowFullScreen
+                                                onLoad={() => {
+                                                    setYoutubeLoading(false);
+                                                    setIsBuffering(false);
+                                                    setIsPlaying(true);
+                                                }}
+                                                onError={(e) => {
+                                                    console.error('YouTube iframe failed to load:', e);
+                                                    setYoutubeLoading(false);
+                                                    setIsBuffering(false);
+                                                }}
+                                            />
+                                        ) : (
+                                            <Box
+                                                sx={{
+                                                    width: '100%',
+                                                    height: '100%',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    backgroundColor: 'rgba(0,0,0,0.8)',
+                                                    color: 'white'
+                                                }}
+                                            >
+                                                <Typography>Unable to load YouTube video</Typography>
+                                            </Box>
+                                        )}
+                                    </>
+                                ) : (
+                                    // Reddit video - use video element
+                                    <video
+                                        ref={videoRef}
+                                        style={{
+                                            width: '100%',
+                                            height: '100%',
+                                            objectFit: 'contain',
+                                            maxHeight: 'calc(100vh - 60px)',
+                                            maxWidth: '100%',
+                                            transition: 'filter 0.3s ease'
+                                        }}
+                                        src={getVideoUrl(currentVideo.videoUrl)}
+                                        playsInline
+                                        preload="auto"
+                                        autoPlay
+                                        muted
+                                        loop={isLooping}
+                                        onTimeUpdate={handleTimeUpdate}
+                                        onPlay={() => setIsPlaying(true)}
+                                        onPause={() => setIsPlaying(false)}
+                                        onWaiting={() => {
+                                            setIsBuffering(true);
+                                        }}
+                                        onPlaying={() => {
+                                            setIsBuffering(false);
+                                        }}
+                                        onCanPlayThrough={() => {
+                                            setIsBuffering(false);
+                                        }}
+                                        onStalled={() => {
+                                            // Don't automatically switch quality on stall
+                                            // This prevents constant quality switching that causes poor UX
+                                            console.log('Video stalled - maintaining current quality for stability');
+                                        }}
+                                        onError={(e) => {
+                                            setIsBuffering(false);
+                                            console.error('Video playback error:', e);
+                                            // Only try one fallback quality to prevent constant switching
+                                            if (videoRef.current && currentVideo.videoUrl.includes('v.redd.it')) {
+                                                const videoId = currentVideo.videoUrl.match(/v\.redd\.it\/([^/?]+)/i)?.[1];
+                                                if (videoId && videoQuality !== '360') {
+                                                    // Try 360p as a single fallback
+                                                    setVideoQuality('360');
+                                                    videoRef.current.src = `https://v.redd.it/${videoId}/DASH_360.mp4`;
+                                                    videoRef.current.load();
+                                                    videoRef.current.play().catch(err => {
+                                                        console.error('Fallback quality also failed:', err);
+                                                    });
+                                                }
+                                            }
+                                        }}
+                                        onClick={() => {
+                                            // Ensure video can be played on user interaction
+                                            if (videoRef.current && videoRef.current.paused) {
                                                 videoRef.current.play().catch(err => {
-                                                    console.error('Fallback quality also failed:', err);
+                                                    console.error('Error playing video on click:', err);
                                                 });
                                             }
-                                        }
-                                    }}
-                                />
+                                        }}
+                                    />
+                                )}
                                 
                                 {/* Audio functionality has been removed */}
                             </Box>

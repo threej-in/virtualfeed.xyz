@@ -206,6 +206,7 @@ const VideoModal: React.FC<VideoModalProps> = ({ video, open, onClose }) => {
                         playsInline
                         preload="auto"
                         autoPlay
+                        muted
                         onTimeUpdate={handleTimeUpdate}
                         onPlay={() => setIsPlaying(true)}
                         onPause={() => setIsPlaying(false)}

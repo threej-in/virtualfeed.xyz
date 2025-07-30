@@ -34,8 +34,10 @@ const StyledFormControl = styled(FormControl)(({ theme }) => ({
   '& .MuiInputLabel-root': {
     fontSize: '0.75rem',
     transform: 'translate(14px, 8px) scale(1)',
+    color: 'rgba(255, 255, 255, 0.8)',
     '&.MuiInputLabel-shrink': {
       transform: 'translate(14px, -6px) scale(0.75)',
+      color: 'rgba(255, 255, 255, 0.9)',
     },
     [theme.breakpoints.down('sm')]: {
       fontSize: '0.7rem',
@@ -48,6 +50,7 @@ const StyledFormControl = styled(FormControl)(({ theme }) => ({
   '& .MuiSelect-select': {
     fontSize: '0.75rem',
     padding: '8px 14px',
+    color: 'rgba(255, 255, 255, 0.9)',
     [theme.breakpoints.down('sm')]: {
       fontSize: '0.7rem',
       padding: '6px 10px',
@@ -68,6 +71,14 @@ const StyledFormControl = styled(FormControl)(({ theme }) => ({
       borderColor: theme.palette.primary.main,
     },
   },
+  // Style the dropdown menu
+  '& .MuiMenu-paper': {
+    backgroundColor: 'rgba(19, 19, 47, 0.95)',
+    backdropFilter: 'blur(12px)',
+    border: '1px solid rgba(108, 99, 255, 0.15)',
+    borderRadius: '12px',
+    boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2)',
+  },
 }));
 
 const FiltersContainer = styled(Box)(({ theme }) => ({
@@ -84,6 +95,14 @@ const FiltersContainer = styled(Box)(({ theme }) => ({
     },
     msOverflowStyle: 'none',  /* IE and Edge */
     scrollbarWidth: 'none',  /* Firefox */
+  },
+  // Mobile popover styles for vertical layout
+  '&.mobile-popover': {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: theme.spacing(1),
+    width: '100%',
+    minWidth: '200px',
   },
 }));
 
@@ -144,8 +163,8 @@ const Filters: React.FC<FiltersProps> = ({
     setShowNsfwDialog(false);
   };
 
-  const renderFilters = () => (
-    <FiltersContainer>
+  const renderFilters = (isMobilePopover = false) => (
+    <FiltersContainer className={isMobilePopover ? 'mobile-popover' : ''}>
       <TrendingButton
         currentTrending={trending}
         onTrendingChange={onTrendingChange}
@@ -161,7 +180,27 @@ const Filters: React.FC<FiltersProps> = ({
           onChange={(e) => onSortByChange(e.target.value)}
           MenuProps={{
             PaperProps: {
-              style: { maxHeight: 200 },
+              sx: {
+                backgroundColor: 'rgba(19, 19, 47, 0.95)',
+                backdropFilter: 'blur(12px)',
+                border: '1px solid rgba(108, 99, 255, 0.15)',
+                borderRadius: '12px',
+                boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2)',
+                maxHeight: 200,
+                '& .MuiMenuItem-root': {
+                  color: 'rgba(255, 255, 255, 0.9)',
+                  fontSize: '0.75rem',
+                  '&:hover': {
+                    backgroundColor: 'rgba(108, 99, 255, 0.1)',
+                  },
+                  '&.Mui-selected': {
+                    backgroundColor: 'rgba(108, 99, 255, 0.2)',
+                    '&:hover': {
+                      backgroundColor: 'rgba(108, 99, 255, 0.25)',
+                    },
+                  },
+                },
+              },
             },
           }}
         >
@@ -177,6 +216,31 @@ const Filters: React.FC<FiltersProps> = ({
           value={order}
           label="Order"
           onChange={(e) => onOrderChange(e.target.value as 'asc' | 'desc')}
+          MenuProps={{
+            PaperProps: {
+              sx: {
+                backgroundColor: 'rgba(19, 19, 47, 0.95)',
+                backdropFilter: 'blur(12px)',
+                border: '1px solid rgba(108, 99, 255, 0.15)',
+                borderRadius: '12px',
+                boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2)',
+                maxHeight: 200,
+                '& .MuiMenuItem-root': {
+                  color: 'rgba(255, 255, 255, 0.9)',
+                  fontSize: '0.75rem',
+                  '&:hover': {
+                    backgroundColor: 'rgba(108, 99, 255, 0.1)',
+                  },
+                  '&.Mui-selected': {
+                    backgroundColor: 'rgba(108, 99, 255, 0.2)',
+                    '&:hover': {
+                      backgroundColor: 'rgba(108, 99, 255, 0.25)',
+                    },
+                  },
+                },
+              },
+            },
+          }}
         >
           <MenuItem value="desc">↓ Desc</MenuItem>
           <MenuItem value="asc">↑ Asc</MenuItem>
@@ -273,7 +337,7 @@ const Filters: React.FC<FiltersProps> = ({
             }
           }}
         >
-          {renderFilters()}
+          {renderFilters(true)}
         </Popover>
       </Box>
     );
@@ -282,7 +346,7 @@ const Filters: React.FC<FiltersProps> = ({
   // For desktop view
   return (
     <>
-      {renderFilters()}
+      {renderFilters(false)}
       
       {/* NSFW Confirmation Dialog */}
       <Dialog

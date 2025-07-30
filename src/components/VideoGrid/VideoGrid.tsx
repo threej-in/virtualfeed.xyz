@@ -13,9 +13,10 @@ interface VideoGridProps {
     playingVideoId?: number | null;
     focusedVideoId?: number | null;
     videoFocusObserver?: React.RefObject<IntersectionObserver | null>;
+    isLargeDevice?: boolean;
 }
 
-const VideoGrid: React.FC<VideoGridProps> = ({ videos, onVideoClick, lastVideoRef, onResetFilters, playingVideoId, focusedVideoId, videoFocusObserver }) => {
+const VideoGrid: React.FC<VideoGridProps> = ({ videos, onVideoClick, lastVideoRef, onResetFilters, playingVideoId, focusedVideoId, videoFocusObserver, isLargeDevice }) => {
     // Cleanup observers when videos change
     useEffect(() => {
         return () => {
@@ -126,8 +127,8 @@ const VideoGrid: React.FC<VideoGridProps> = ({ videos, onVideoClick, lastVideoRe
                             lastVideoRef?.(node);
                         }
                         
-                        // Handle video focus observer
-                        if (videoFocusObserver?.current && node) {
+                        // Handle video focus observer (only on mobile devices)
+                        if (videoFocusObserver?.current && node && !isLargeDevice) {
                             node.setAttribute('data-video-id', video.id.toString());
                             videoFocusObserver.current.observe(node);
                         }
@@ -150,9 +151,16 @@ const VideoGrid: React.FC<VideoGridProps> = ({ videos, onVideoClick, lastVideoRe
                             onVideoClick={onVideoClick}
                             isPlaying={playingVideoId === video.id}
                             isFocused={focusedVideoId === video.id}
+                            isLargeDevice={isLargeDevice}
                         />
                     ) : (
-                        <VideoCard video={video} onClick={() => onVideoClick(video)} isFocused={focusedVideoId === video.id} isPlaying={playingVideoId === video.id} />
+                        <VideoCard 
+                            video={video} 
+                            onClick={() => onVideoClick(video)} 
+                            isFocused={focusedVideoId === video.id} 
+                            isPlaying={playingVideoId === video.id}
+                            isLargeDevice={isLargeDevice}
+                        />
                     )}
                 </Grid>
             ))}

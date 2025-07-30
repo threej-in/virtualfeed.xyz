@@ -12,6 +12,7 @@ import {
   Button,
   IconButton,
   Drawer,
+  useMediaQuery,
 } from '@mui/material';
 import { Menu as MenuIcon, Close as CloseIcon } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -20,7 +21,6 @@ import SearchBar from './components/SearchBar/SearchBar';
 import Filters from './components/Filters/Filters';
 import Sidebar from './components/Sidebar/Sidebar';
 import VideoPlayer from './components/VideoPlayer/VideoPlayer';
-import YouTubeVideoPlayer from './components/VideoPlayer/YouTubeVideoPlayer';
 import VideoSubmission from './components/VideoSubmission/VideoSubmission';
 import Background from './components/Background/Background';
 import { Video } from './types/Video';
@@ -149,6 +149,9 @@ function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [playingVideoId, setPlayingVideoId] = useState<number | null>(null);
   const [focusedVideoId, setFocusedVideoId] = useState<number | null>(null);
+
+  // Detect if we're on a large device (desktop/tablet)
+  const isLargeDevice = useMediaQuery('(min-width:900px)');
 
   // Observer for infinite scrolling
   const observer = useRef<IntersectionObserver | null>(null);
@@ -281,8 +284,13 @@ function App() {
     }
   }, [loading, initialLoading, hasMore, loadMoreVideos]);
 
-  // Set up intersection observer for video focus/autoplay
+  // Set up intersection observer for video focus/autoplay (only on mobile devices)
   useEffect(() => {
+    // Only enable autoplay on mobile devices
+    if (isLargeDevice) {
+      return;
+    }
+
     videoFocusObserver.current = new IntersectionObserver(
       (entries) => {
         // Find the video that is most in focus (highest intersection ratio)
@@ -317,7 +325,7 @@ function App() {
         videoFocusObserver.current.disconnect();
       }
     };
-  }, [videos]);
+  }, [videos, isLargeDevice]);
 
   // Add scroll event listener as backup for infinite scrolling with snap scrolling
   useEffect(() => {
@@ -557,7 +565,7 @@ function App() {
                 <Box sx={{ 
                   flex: 1, 
                   p: { xs: 0, md: 3 }, 
-                  marginLeft: { md: '250px' },
+                  marginLeft: { md: '260px' },
                   width: { xs: '100%', md: 'auto' },
                   height: '100%',
                   display: 'flex',
@@ -566,22 +574,37 @@ function App() {
                   <VideoGrid
                     videos={videos}
                     onVideoClick={(video) => {
-                      if (video.platform === 'youtube') {
-                        // For YouTube videos, manually toggle playing state (override autoplay)
-                        setPlayingVideoId(playingVideoId === video.id ? null : video.id);
-                        setFocusedVideoId(playingVideoId === video.id ? null : video.id);
-                        setSelectedVideo(null); // Don't open popup for YouTube
+                      if (isLargeDevice) {
+                        // On large devices, always use popup for both YouTube and Reddit videos
+                        if (video.platform === 'youtube') {
+                          setSelectedVideo(selectedVideo?.id === video.id ? null : video);
+                          setPlayingVideoId(null); // Stop any in-place playing video
+                          setFocusedVideoId(null);
+                        } else {
+                          setSelectedVideo(selectedVideo?.id === video.id ? null : video);
+                          setPlayingVideoId(null); // Stop any playing YouTube video
+                          setFocusedVideoId(null);
+                        }
                       } else {
-                        // For Reddit videos, manually toggle popup (override autoplay)
-                        setSelectedVideo(selectedVideo?.id === video.id ? null : video);
-                        setPlayingVideoId(null); // Stop any playing YouTube video
-                        setFocusedVideoId(selectedVideo?.id === video.id ? null : video.id);
+                        // On mobile devices, use the existing autoplay behavior
+                        if (video.platform === 'youtube') {
+                          // For YouTube videos, manually toggle playing state (override autoplay)
+                          setPlayingVideoId(playingVideoId === video.id ? null : video.id);
+                          setFocusedVideoId(playingVideoId === video.id ? null : video.id);
+                          setSelectedVideo(null); // Don't open popup for YouTube
+                        } else {
+                          // For Reddit videos, manually toggle popup (override autoplay)
+                          setSelectedVideo(selectedVideo?.id === video.id ? null : video);
+                          setPlayingVideoId(null); // Stop any playing YouTube video
+                          setFocusedVideoId(selectedVideo?.id === video.id ? null : video.id);
+                        }
                       }
                     }}
                     lastVideoRef={lastVideoElementRef}
                     playingVideoId={playingVideoId}
                     focusedVideoId={focusedVideoId}
                     videoFocusObserver={videoFocusObserver}
+                    isLargeDevice={isLargeDevice}
                     onResetFilters={() => {
                       // Reset all filters and return to homepage
                       setFilterValues({
@@ -616,8 +639,8 @@ function App() {
           )}
         </AnimatePresence>
 
-        {/* Video Player with swipe functionality - only for Reddit videos */}
-        {selectedVideo && selectedVideo.platform !== 'youtube' && (
+        {/* Video Player with swipe functionality - for both YouTube and Reddit videos on large devices */}
+        {selectedVideo && (
           <VideoPlayer
             videos={videos}
             initialVideoIndex={selectedVideo ? videos.findIndex(v => v.id === selectedVideo.id) : 0}

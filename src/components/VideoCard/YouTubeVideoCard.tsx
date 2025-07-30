@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Card,
   CardContent,
@@ -9,6 +9,7 @@ import {
   IconButton,
   Tooltip,
   Skeleton,
+  CircularProgress,
 } from '@mui/material';
 import {
   PlayArrow as PlayIcon,
@@ -26,6 +27,7 @@ interface YouTubeVideoCardProps {
   isLoading?: boolean;
   isPlaying?: boolean;
   isFocused?: boolean;
+  isLargeDevice?: boolean;
 }
 
 const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
@@ -34,9 +36,11 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
   isLoading = false,
   isPlaying = false,
   isFocused = false,
+  isLargeDevice = false,
 }) => {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [videoLoading, setVideoLoading] = useState(false);
 
   const handleImageLoad = () => {
     setImageLoaded(true);
@@ -46,6 +50,23 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
     setImageError(true);
     setImageLoaded(true);
   };
+
+  const handleVideoLoadStart = () => {
+    setVideoLoading(true);
+  };
+
+  const handleVideoLoad = () => {
+    setVideoLoading(false);
+  };
+
+  // Set video loading state when video starts playing
+  useEffect(() => {
+    if (isPlaying) {
+      setVideoLoading(true);
+    } else {
+      setVideoLoading(false);
+    }
+  }, [isPlaying]);
 
   // Function to get the best quality thumbnail
   const getBestThumbnail = (video: Video): string => {
@@ -219,24 +240,84 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
           
           {/* Show embedded video when playing */}
           {isPlaying ? (
-            <Box
-              component="iframe"
-              src={getYouTubeEmbedUrl(video)}
-              title={video.title}
-              frameBorder="0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-              sx={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100vh',
-                maxHeight: '100vh',
-                border: 'none',
-                borderRadius: 'inherit',
-              }}
-            />
+            <>
+              {/* Show thumbnail while video is loading */}
+              {videoLoading && (
+                <CardMedia
+                  component="img"
+                  image={
+                    imageError
+                      ? 'https://via.placeholder.com/400x720/1a1a1a/ffffff?text=YouTube+Video'
+                      : getBestThumbnail(video)
+                  }
+                  alt={video.title}
+                  sx={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    objectPosition: 'center',
+                    display: imageLoaded ? 'block' : 'none',
+                    minHeight: '100%',
+                    minWidth: '100%',
+                    aspectRatio: '9/16',
+                    '& img': {
+                      objectFit: 'cover',
+                      objectPosition: 'center',
+                    },
+                  }}
+                  onLoad={handleImageLoad}
+                  onError={handleImageError}
+                />
+              )}
+              
+              {/* Loading overlay */}
+              {videoLoading && (
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                    borderRadius: '50%',
+                    width: 60,
+                    height: 60,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 2,
+                  }}
+                >
+                  <CircularProgress size={30} sx={{ color: 'white' }} />
+                </Box>
+              )}
+              
+              {/* YouTube iframe */}
+              <Box
+                component="iframe"
+                src={getYouTubeEmbedUrl(video)}
+                title={video.title}
+                frameBorder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                onLoad={handleVideoLoad}
+                sx={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100vh',
+                  maxHeight: '100vh',
+                  border: 'none',
+                  borderRadius: 'inherit',
+                  opacity: videoLoading ? 0 : 1,
+                  transition: 'opacity 0.3s ease-in-out',
+                }}
+              />
+            </>
           ) : (
             <CardMedia
               component="img"
@@ -297,8 +378,8 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
             </Box>
           )}
 
-          {/* Focus indicator - shows when video is in viewport center */}
-          {isFocused && !isPlaying && (
+          {/* Focus indicator - shows when video is in viewport center (only on mobile) */}
+          {isFocused && !isPlaying && !isLargeDevice && (
             <Box
               sx={{
                 position: 'absolute',

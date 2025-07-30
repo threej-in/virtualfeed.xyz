@@ -12,6 +12,7 @@ import {
   YouTube as YouTubeIcon,
   Add as AddIcon,
   TrendingUp as TrendingIcon,
+  GitHub as GitHubIcon,
 } from '@mui/icons-material';
 
 interface SidebarProps {
@@ -22,31 +23,33 @@ interface SidebarProps {
 }
 
 const StyledSidebar = styled(Box)(({ theme }) => ({
-  width: 250,
-  height: 'calc(100vh - 80px)', // Subtract header height
-  background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%)',
-  borderRight: '1px solid rgba(255, 255, 255, 0.1)',
-  backdropFilter: 'blur(20px)',
+  width: 260,
+  height: 'calc(100vh - 60px)', // Account for header height
+  background: 'linear-gradient(135deg, rgba(19, 19, 47, 0.95) 0%, rgba(25, 25, 60, 0.9) 100%)',
+  borderRight: '1px solid rgba(108, 99, 255, 0.2)',
+  backdropFilter: 'blur(25px)',
   padding: theme.spacing(3),
   display: 'flex',
   flexDirection: 'column',
   gap: theme.spacing(3),
   position: 'fixed',
-  top: 80, // Account for header height
+  top: 60, // Account for header height
+  left: 0,
   overflowY: 'auto',
   zIndex: 1000,
+  boxShadow: '8px 0 30px rgba(0, 0, 0, 0.3)',
   '&::-webkit-scrollbar': {
-    width: '6px',
+    width: '8px',
   },
   '&::-webkit-scrollbar-track': {
     background: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: '3px',
+    borderRadius: '4px',
   },
   '&::-webkit-scrollbar-thumb': {
-    background: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: '3px',
+    background: 'rgba(108, 99, 255, 0.3)',
+    borderRadius: '4px',
     '&:hover': {
-      background: 'rgba(255, 255, 255, 0.3)',
+      background: 'rgba(108, 99, 255, 0.5)',
     },
   },
   // Mobile responsive styles - only apply when not in drawer
@@ -57,20 +60,20 @@ const StyledSidebar = styled(Box)(({ theme }) => ({
     top: 'auto',
     borderRight: 'none',
     padding: 0,
-    gap: theme.spacing(3),
+    gap: theme.spacing(1.5),
     background: 'transparent',
     overflowY: 'visible',
     '& .platform-buttons': {
       display: 'flex',
       flexDirection: 'column',
-      gap: theme.spacing(2),
+      gap: theme.spacing(1),
     },
     '& .platform-button': {
-      height: 56,
-      fontSize: '1rem',
+      height: 40,
+      fontSize: '0.8rem',
       fontWeight: 600,
-      borderRadius: 12,
-      border: '2px solid rgba(255, 255, 255, 0.1)',
+      borderRadius: 8,
+      border: '1px solid rgba(255, 255, 255, 0.1)',
       background: 'rgba(255, 255, 255, 0.03)',
       backdropFilter: 'blur(10px)',
       transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -82,66 +85,69 @@ const StyledSidebar = styled(Box)(({ theme }) => ({
       '&:hover': {
         background: 'rgba(255, 255, 255, 0.08)',
         borderColor: 'rgba(255, 255, 255, 0.2)',
-        transform: 'translateY(-2px)',
-        boxShadow: '0 8px 25px rgba(0, 0, 0, 0.2)',
+        transform: 'translateY(-1px)',
+        boxShadow: '0 4px 15px rgba(0, 0, 0, 0.2)',
         color: 'white',
       },
       '&.active': {
         background: 'linear-gradient(135deg, rgba(108, 99, 255, 0.2), rgba(255, 101, 132, 0.2))',
         borderColor: 'rgba(108, 99, 255, 0.4)',
-        boxShadow: '0 8px 25px rgba(108, 99, 255, 0.3)',
+        boxShadow: '0 4px 15px rgba(108, 99, 255, 0.3)',
         color: 'white',
       },
       '& .MuiButton-startIcon': {
-        marginRight: '12px',
-        fontSize: '1.5rem',
+        marginRight: '8px',
+        fontSize: '1.1rem',
       },
     },
     '& .submit-section': {
       background: 'rgba(255, 255, 255, 0.03)',
-      borderRadius: 16,
-      padding: theme.spacing(3),
+      borderRadius: 10,
+      padding: theme.spacing(1.5),
       border: '1px solid rgba(255, 255, 255, 0.1)',
       backdropFilter: 'blur(10px)',
     },
     '& .stats-section': {
       background: 'rgba(255, 255, 255, 0.02)',
-      borderRadius: 16,
-      padding: theme.spacing(3),
+      borderRadius: 10,
+      padding: theme.spacing(1.5),
       border: '1px solid rgba(255, 255, 255, 0.08)',
       backdropFilter: 'blur(10px)',
     },
   },
 }));
 
-const PlatformButton = styled(Button)<{ active?: boolean }>(({ theme, active }) => ({
+const PlatformButton = styled(Button, {
+  shouldForwardProp: (prop) => prop !== '$active'
+})<{ $active?: boolean }>(({ theme, $active }) => ({
   width: '100%',
-  height: 40,
-  borderRadius: 10,
-  background: active 
+  height: 44,
+  borderRadius: 12,
+  background: $active 
     ? 'linear-gradient(135deg, rgba(108, 99, 255, 0.2), rgba(255, 101, 132, 0.2))'
     : 'rgba(255, 255, 255, 0.03)',
-  border: active 
+  border: $active 
     ? '2px solid rgba(108, 99, 255, 0.4)'
     : '1px solid rgba(255, 255, 255, 0.1)',
-  color: active ? 'white' : 'rgba(255, 255, 255, 0.7)',
+  color: $active ? 'white' : 'rgba(255, 255, 255, 0.7)',
   textTransform: 'none',
   fontWeight: 600,
   fontSize: '0.9rem',
   transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
   position: 'relative',
   overflow: 'hidden',
+  backdropFilter: 'blur(10px)',
   '&:hover': {
-    background: active 
+    background: $active 
       ? 'linear-gradient(135deg, rgba(108, 99, 255, 0.25), rgba(255, 101, 132, 0.25))'
       : 'rgba(255, 255, 255, 0.08)',
-    borderColor: active ? 'rgba(108, 99, 255, 0.5)' : 'rgba(255, 255, 255, 0.2)',
+    borderColor: $active ? 'rgba(108, 99, 255, 0.5)' : 'rgba(255, 255, 255, 0.2)',
     transform: 'translateY(-2px)',
-    boxShadow: active 
+    boxShadow: $active 
       ? '0 8px 25px rgba(108, 99, 255, 0.3)'
       : '0 4px 15px rgba(0, 0, 0, 0.2)',
   },
-  '&::before': active ? {
+  '&::before': $active ? {
     content: '""',
     position: 'absolute',
     top: 0,
@@ -149,28 +155,29 @@ const PlatformButton = styled(Button)<{ active?: boolean }>(({ theme, active }) 
     right: 0,
     bottom: 0,
     background: 'linear-gradient(135deg, rgba(108, 99, 255, 0.1), rgba(255, 101, 132, 0.1))',
-    borderRadius: 14,
+    borderRadius: 12,
     zIndex: -1,
   } : {},
   '& .MuiButton-startIcon': {
     marginRight: theme.spacing(1.5),
-    fontSize: '1.5rem',
+    fontSize: '1.4rem',
   },
   // Mobile responsive styles
   [theme.breakpoints.down('md')]: {
-    height: 48,
-    fontSize: '1rem',
+    height: 40,
+    fontSize: '0.85rem',
+    borderRadius: 10,
     '& .MuiButton-startIcon': {
       marginRight: theme.spacing(1),
-      fontSize: '1.3rem',
+      fontSize: '1.2rem',
     },
   },
 }));
 
 const SubmitButton = styled(Button)(({ theme }) => ({
   width: '100%',
-  height: 40,
-  borderRadius: 10,
+  height: 44,
+  borderRadius: 12,
   background: 'linear-gradient(135deg, #6c63ff, #ff6584)',
   color: 'white',
   textTransform: 'none',
@@ -179,6 +186,7 @@ const SubmitButton = styled(Button)(({ theme }) => ({
   transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
   position: 'relative',
   overflow: 'hidden',
+  backdropFilter: 'blur(10px)',
   '&:hover': {
     background: 'linear-gradient(135deg, #5a52ff, #ff4d6a)',
     transform: 'translateY(-2px)',
@@ -192,20 +200,66 @@ const SubmitButton = styled(Button)(({ theme }) => ({
     right: 0,
     bottom: 0,
     background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05))',
-    borderRadius: 14,
+    borderRadius: 12,
     zIndex: -1,
   },
   '& .MuiButton-startIcon': {
     marginRight: theme.spacing(1.5),
-    fontSize: '1.5rem',
+    fontSize: '1.4rem',
   },
   // Mobile responsive styles
   [theme.breakpoints.down('md')]: {
-    height: 48,
-    fontSize: '1.1rem',
+    height: 40,
+    fontSize: '0.9rem',
+    borderRadius: 10,
     '& .MuiButton-startIcon': {
       marginRight: theme.spacing(1),
-      fontSize: '1.3rem',
+      fontSize: '1.2rem',
+    },
+  },
+}));
+
+const GitHubButton = styled(Button)(({ theme }) => ({
+  width: '100%',
+  height: 44,
+  borderRadius: 12,
+  background: 'linear-gradient(135deg, #24292e, #586069)',
+  color: 'white',
+  textTransform: 'none',
+  fontWeight: 700,
+  fontSize: '1rem',
+  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+  position: 'relative',
+  overflow: 'hidden',
+  backdropFilter: 'blur(10px)',
+  '&:hover': {
+    background: 'linear-gradient(135deg, #1b1f23, #4a5568)',
+    transform: 'translateY(-2px)',
+    boxShadow: '0 8px 25px rgba(36, 41, 46, 0.4)',
+  },
+  '&::before': {
+    content: '""',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05))',
+    borderRadius: 12,
+    zIndex: -1,
+  },
+  '& .MuiButton-startIcon': {
+    marginRight: theme.spacing(1.5),
+    fontSize: '1.4rem',
+  },
+  // Mobile responsive styles
+  [theme.breakpoints.down('md')]: {
+    height: 40,
+    fontSize: '0.9rem',
+    borderRadius: 10,
+    '& .MuiButton-startIcon': {
+      marginRight: theme.spacing(1),
+      fontSize: '1.2rem',
     },
   },
 }));
@@ -221,12 +275,17 @@ const Sidebar: React.FC<SidebarProps> = ({
   return (
     <StyledSidebar className={isMobileDrawer ? 'mobile-drawer' : ''}>
       {/* Platform Selection */}
-      <Box className="platform-buttons">        
+      <Box className="platform-buttons" sx={{ 
+        display: 'flex', 
+        flexDirection: 'column', 
+        gap: 1.5,
+        mb: 2
+      }}>        
         <PlatformButton
           variant="outlined"
           startIcon={<TrendingIcon sx={{ color: '#6c63ff' }} />}
           onClick={() => onPlatformChange('')}
-          active={currentPlatform === ''}
+          $active={currentPlatform === ''}
           className={currentPlatform === '' ? 'platform-button active' : 'platform-button'}
         >
           All Videos
@@ -236,7 +295,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           variant="outlined"
           startIcon={<RedditIcon sx={{ color: '#FF4500' }} />}
           onClick={() => onPlatformChange('reddit')}
-          active={currentPlatform === 'reddit'}
+          $active={currentPlatform === 'reddit'}
           className={currentPlatform === 'reddit' ? 'platform-button active' : 'platform-button'}
         >
           Reddit Videos
@@ -246,62 +305,93 @@ const Sidebar: React.FC<SidebarProps> = ({
           variant="outlined"
           startIcon={<YouTubeIcon sx={{ color: '#FF0000' }} />}
           onClick={() => onPlatformChange('youtube')}
-          active={currentPlatform === 'youtube'}
+          $active={currentPlatform === 'youtube'}
           className={currentPlatform === 'youtube' ? 'platform-button active' : 'platform-button'}
         >
           YouTube
         </PlatformButton>
       </Box>
 
-      <Divider sx={{ borderColor: 'rgba(255, 255, 255, 0.1)' }} />
+      <Divider sx={{ 
+        borderColor: 'rgba(108, 99, 255, 0.2)', 
+        my: 0.5,
+        borderWidth: '1px'
+      }} />
 
-      {/* Submit Video */}
-      <Box className="submit-section">
-        <Typography
-          variant="subtitle2"
-          sx={{
-            color: 'rgba(255, 255, 255, 0.9)',
-            fontWeight: 700,
-            mb: 2,
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-            fontSize: { xs: '0.875rem', md: '0.75rem' },
-          }}
-        >
-          Contribute
-        </Typography>
-        
-        <SubmitButton
-          variant="contained"
-          startIcon={<AddIcon sx={{ fontSize: { xs: '1.25rem', md: '1rem' } }} />}
-          onClick={onVideoSubmission}
-          sx={{
-            width: '100%',
-            height: { xs: 48, md: 40 },
-            fontSize: { xs: '1rem', md: '0.9rem' },
-            fontWeight: 600,
-            borderRadius: { xs: 12, md: 10 },
-            background: 'linear-gradient(135deg, #6c63ff, #ff6584)',
-            '&:hover': {
-              background: 'linear-gradient(135deg, #5a52d5, #e55a75)',
-              transform: 'translateY(-2px)',
-              boxShadow: '0 8px 25px rgba(108, 99, 255, 0.4)',
-            },
-            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-          }}
-        >
-          Submit Video
-        </SubmitButton>
-      </Box>
+             {/* Contribute Section */}
+       <Box className="submit-section" sx={{
+         mb: 2
+       }}>
+                   <Typography
+            variant="subtitle2"
+            sx={{
+              color: 'rgba(255, 255, 255, 0.9)',
+              fontWeight: 700,
+              mb: 2,
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+              fontSize: { xs: '0.75rem', md: '0.75rem' },
+            }}
+          >
+            Contribute
+          </Typography>
+         
+         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+           <SubmitButton
+             variant="contained"
+             startIcon={<AddIcon sx={{ fontSize: { xs: '1.25rem', md: '1rem' } }} />}
+             onClick={onVideoSubmission}
+                           sx={{
+                width: '100%',
+                height: { xs: 40, md: 40 },
+                fontSize: { xs: '0.8rem', md: '0.9rem' },
+                fontWeight: 600,
+                borderRadius: { xs: 8, md: 10 },
+                background: 'linear-gradient(135deg, #6c63ff, #ff6584)',
+                '&:hover': {
+                  background: 'linear-gradient(135deg, #5a52d5, #e55a75)',
+                  transform: 'translateY(-2px)',
+                  boxShadow: '0 8px 25px rgba(108, 99, 255, 0.4)',
+                },
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              }}
+           >
+             Submit Video
+           </SubmitButton>
+           
+           <GitHubButton
+             variant="contained"
+             startIcon={<GitHubIcon sx={{ fontSize: { xs: '1.25rem', md: '1rem' } }} />}
+             onClick={() => window.open('https://github.com/threej-in/virtualfeed.xyz', '_blank')}
+                           sx={{
+                width: '100%',
+                height: { xs: 40, md: 40 },
+                fontSize: { xs: '0.8rem', md: '0.9rem' },
+                fontWeight: 600,
+                borderRadius: { xs: 8, md: 10 },
+                background: 'linear-gradient(135deg, #24292e, #586069)',
+                '&:hover': {
+                  background: 'linear-gradient(135deg, #1b1f23, #4a5568)',
+                  transform: 'translateY(-2px)',
+                  boxShadow: '0 8px 25px rgba(36, 41, 46, 0.4)',
+                },
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              }}
+           >
+             GitHub
+           </GitHubButton>
+         </Box>
+       </Box>
 
       {/* Stats or Info */}
       <Box sx={{ mt: 'auto', pt: 2 }} className="stats-section">
         <Box
           sx={{
-            p: { xs: 3, md: 2 },
-            borderRadius: { xs: 3, md: 2 },
-            background: 'transparent',
-            border: 'none',
+            p: 2,
+            borderRadius: 2,
+            background: 'rgba(255, 255, 255, 0.01)',
+            border: '1px solid rgba(255, 255, 255, 0.05)',
+            backdropFilter: 'blur(10px)',
           }}
         >
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -310,27 +400,27 @@ const Sidebar: React.FC<SidebarProps> = ({
               fontSize: { xs: 24, md: 20 }, 
               mr: 1.5 
             }} />
-            <Typography
-              variant="subtitle2"
-              sx={{
-                color: 'rgba(255, 255, 255, 0.9)',
-                fontWeight: 700,
-                fontSize: { xs: '1rem', md: '0.875rem' },
-              }}
-            >
-              Trending Now
-            </Typography>
+                         <Typography
+               variant="subtitle2"
+               sx={{
+                 color: 'rgba(255, 255, 255, 0.9)',
+                 fontWeight: 700,
+                 fontSize: { xs: '0.8rem', md: '0.875rem' },
+               }}
+             >
+               Trending Now
+             </Typography>
           </Box>
-          <Typography
-            variant="body2"
-            sx={{
-              color: 'rgba(255, 255, 255, 0.7)',
-              lineHeight: 1.5,
-              fontSize: { xs: '0.875rem', md: '0.75rem' },
-            }}
-          >
-            Discover the latest AI-generated videos from Reddit and YouTube
-          </Typography>
+                     <Typography
+             variant="body2"
+             sx={{
+               color: 'rgba(255, 255, 255, 0.7)',
+               lineHeight: 1.5,
+               fontSize: { xs: '0.7rem', md: '0.75rem' },
+             }}
+           >
+             Discover the latest AI-generated videos from Reddit and YouTube
+           </Typography>
         </Box>
       </Box>
     </StyledSidebar>

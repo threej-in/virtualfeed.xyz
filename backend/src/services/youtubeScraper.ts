@@ -3,6 +3,7 @@ import { logger } from './logger';
 import Video from '../models/Video';
 import { VideoProcessor } from './videoProcessor';
 import { getEnabledSearchTerms, getEnabledSearchTermsWithLimit, YouTubeSearchConfig } from '../config/youtubeSearchTerms';
+import { LanguageDetector } from '../utils/languageDetection';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -298,6 +299,13 @@ export class YouTubeScraper {
       // Extract tags from title, description, and search term
       const tags = this.extractTags(video.snippet.title, video.snippet.description, searchTerm, video.snippet.tags);
 
+      // Detect language from video content
+      const languageDetection = LanguageDetector.detectVideoLanguage({
+        title: video.snippet.title,
+        description: video.snippet.description,
+        tags: video.snippet.tags || []
+      });
+
       // Create video data
       const videoData = {
         title: video.snippet.title,
@@ -310,6 +318,7 @@ export class YouTubeScraper {
         nsfw: false,
         likes: parseInt(videoDetails.statistics.likeCount) || 0,
         platform: 'youtube',
+        language: languageDetection.language,
         metadata: {
           platform: 'youtube',
           youtubeId: videoId,
@@ -323,7 +332,12 @@ export class YouTubeScraper {
           searchTerm: searchTerm,
           channelTitle: video.snippet.channelTitle || 'Unknown Channel',
           viewCount: parseInt(videoDetails.statistics.viewCount) || 0,
-          commentCount: parseInt(videoDetails.statistics.commentCount) || 0
+          commentCount: parseInt(videoDetails.statistics.commentCount) || 0,
+          languageDetection: {
+            language: languageDetection.language,
+            confidence: languageDetection.confidence,
+            detectedBy: languageDetection.detectedBy
+          }
         }
       };
 

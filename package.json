@@ -1,54 +1,65 @@
 {
-  "name": "virtualfeed.xyz",
-  "version": "0.1.0",
-  "private": true,
-  "dependencies": {
-    "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.0",
-    "@mui/icons-material": "^6.4.6",
-    "@mui/material": "^6.4.6",
-    "@testing-library/dom": "^10.4.0",
-    "@testing-library/jest-dom": "^6.6.3",
-    "@testing-library/react": "^16.2.0",
-    "@testing-library/user-event": "^13.5.0",
-    "@tsparticles/engine": "^3.8.1",
-    "@tsparticles/react": "^3.0.0",
-    "@tsparticles/slim": "^3.8.1",
-    "@types/jest": "^27.5.2",
-    "@types/node": "^16.18.126",
-    "@types/react": "^19.0.10",
-    "@types/react-dom": "^19.0.4",
-    "axios": "^1.11.0",
-    "framer-motion": "^12.19.1",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "react-scripts": "5.0.1",
-    "react-swipeable": "^7.0.2",
-    "typescript": "^4.9.5",
-    "web-vitals": "^2.1.4"
-  },
-  "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject"
-  },
-  "eslintConfig": {
-    "extends": [
-      "react-app",
-      "react-app/jest"
-    ]
-  },
-  "browserslist": {
-    "production": [
-      ">0.2%",
-      "not dead",
-      "not op_mini all"
-    ],
-    "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
-    ]
-  }
+    "name": "virtualfeed.xyz",
+    "version": "0.1.0",
+    "private": true,
+    "dependencies": {
+        "@emotion/react": "^11.14.0",
+        "@emotion/styled": "^11.14.1",
+        "@mui/icons-material": "^6.5.0",
+        "@mui/material": "^6.5.0",
+        "@testing-library/dom": "^10.4.1",
+        "@testing-library/jest-dom": "^6.8.0",
+        "@testing-library/react": "^16.3.0",
+        "@testing-library/user-event": "^13.5.0",
+        "@tsparticles/engine": "^3.9.1",
+        "@tsparticles/react": "^3.0.0",
+        "@tsparticles/slim": "^3.9.1",
+        "@types/jest": "^27.5.2",
+        "@types/node": "^16.18.126",
+        "@types/react": "^19.1.15",
+        "@types/react-dom": "^19.1.9",
+        "axios": "^1.12.2",
+        "framer-motion": "^12.23.22",
+        "react": "^19.1.1",
+        "react-dom": "^19.1.1",
+        "react-scripts": "5.0.1",
+        "react-swipeable": "^7.0.2",
+        "typescript": "^4.9.5",
+        "web-vitals": "^2.1.4"
+    },
+    "scripts": {
+        "start": "npm run start:prod",
+        "build": "react-scripts build",
+        "test": "react-scripts test",
+        "eject": "react-scripts eject",
+        "backend:dev": "npm run dev --prefix backend",
+        "backend:start": "npm run start --prefix backend",
+        "backend:build": "npm run build --prefix backend",
+        "dev": "npm run build && npm run backend:dev",
+        "build:full": "npm run build && npm run backend:build",
+        "start:prod": "npm run build:full && node backend/dist/index.js",
+        "postinstall": "npm install --prefix backend"
+    },
+    "eslintConfig": {
+        "extends": [
+            "react-app",
+            "react-app/jest"
+        ]
+    },
+    "browserslist": {
+        "production": [
+            ">0.2%",
+            "not dead",
+            "not op_mini all"
+        ],
+        "development": [
+            "last 1 chrome version",
+            "last 1 firefox version",
+            "last 1 safari version"
+        ]
+    },
+    "proxy": "http://localhost:5000",
+    "devDependencies": {
+        "concurrently": "^8.2.2"
+    }
 }

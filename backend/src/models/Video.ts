@@ -16,11 +16,12 @@ interface VideoAttributes {
   nsfw: boolean;
   blacklisted: boolean;
   metadata: object;
+  language: string | null; // Added language field
   createdAt?: Date;
   updatedAt?: Date;
 }
 
-interface VideoCreationAttributes extends Optional<VideoAttributes, 'id' | 'views' | 'likes' | 'platform'> {}
+interface VideoCreationAttributes extends Optional<VideoAttributes, 'id' | 'views' | 'likes' | 'platform' | 'language'> {}
 
 class Video extends Model<VideoAttributes, VideoCreationAttributes> implements VideoAttributes {
   public id!: number;
@@ -37,6 +38,7 @@ class Video extends Model<VideoAttributes, VideoCreationAttributes> implements V
   public nsfw!: boolean;
   public blacklisted!: boolean;
   public metadata!: object;
+  public language!: string | null; // Added language field
 
   // Timestamps
   public readonly createdAt!: Date;
@@ -108,6 +110,11 @@ Video.init(
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: false,
+    },
+    language: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      defaultValue: null,
     },
   },
   {

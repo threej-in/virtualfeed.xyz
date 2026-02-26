@@ -1,8 +1,13 @@
 import axios from 'axios';
 import { Video } from '../types/Video';
 
-// Use environment variable with fallback for local development
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const API_URL = process.env.REACT_APP_API_URL || '/api';
+
+export const getRedditAudioProxyUrl = (audioUrl: string): string => {
+    const params = new URLSearchParams();
+    params.append('url', audioUrl);
+    return `${API_URL}/videos/reddit-audio?${params.toString()}`;
+};
 
 export interface VideoResponse {
     videos: Video[];
@@ -25,6 +30,7 @@ export interface VideoFilters {
     order?: 'asc' | 'desc';
     showNsfw?: boolean;
     trending?: '24h' | '48h' | '1w';
+    language?: string;
 }
 
 export const getVideos = async (filters: VideoFilters): Promise<VideoResponse> => {

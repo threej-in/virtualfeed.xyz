@@ -23,12 +23,14 @@ import {
     Loop as LoopIcon,
     Reddit as RedditIcon,
     Settings as SettingsIcon,
-    Download as DownloadIcon
+    Download as DownloadIcon,
+    VolumeUp as VolumeUpIcon,
+    VolumeOff as VolumeOffIcon
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSwipeable } from 'react-swipeable';
 import { Video } from '../../types/Video';
-import { updateVideoStats } from '../../services/api';
+import { updateVideoStats, getRedditAudioProxyUrl } from '../../services/api';
 
 interface VideoPlayerProps {
     videos: Video[];
@@ -45,8 +47,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
     
     const [currentIndex, setCurrentIndex] = useState(initialVideoIndex);
     const [isPlaying, setIsPlaying] = useState(false);
-    // Always mute videos - audio playback removed as requested
-    const [isMuted] = useState(true);
+    // Start muted to satisfy autoplay policies; users can enable sound manually
+    const [isMuted, setIsMuted] = useState(true);
     const [isLooping, setIsLooping] = useState(true);
     const [progress, setProgress] = useState(0);
     const [currentTime, setCurrentTime] = useState(0);
@@ -57,10 +59,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
     const [isBuffering, setIsBuffering] = useState(false);
     const [showQualityMenu, setShowQualityMenu] = useState(false);
     const [youtubeLoading, setYoutubeLoading] = useState(false);
+    const [hasAudioTrack, setHasAudioTrack] = useState(false);
+    const [isAudioReady, setIsAudioReady] = useState(false);
     // const [isInitialLoading, setIsInitialLoading] = useState(true);
     // const [networkSpeed, setNetworkSpeed] = useState<number | null>(null); // Kept for compatibility
     
     const videoRef = useRef<HTMLVideoElement>(null);
+    const audioRef = useRef<HTMLAudioElement>(null);
     const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const loadStartTimeRef = useRef<number>(0);
     // const nextVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -152,6 +157,27 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         // This function is kept as a placeholder to maintain code structure
         return;
     }, []);
+
+    const syncMedia = useCallback((force = false) => {
+        const videoElement = videoRef.current;
+        const audioElement = audioRef.current;
+
+        if (!videoElement || !audioElement) {
+            return;
+        }
+
+        const timeDifference = Math.abs(audioElement.currentTime - videoElement.currentTime);
+
+        if (!force && timeDifference <= 0.3) {
+            return;
+        }
+
+        try {
+            audioElement.currentTime = videoElement.currentTime;
+        } catch (error) {
+            console.error('Error syncing Reddit audio track:', error);
+        }
+    }, []);
     
     
     useEffect(() => {
@@ -161,6 +187,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         setDuration(0);
         setIsPlaying(false);
         setIsBuffering(true);
+        setHasAudioTrack(false);
+        setIsAudioReady(false);
+        if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current.currentTime = 0;
+            audioRef.current.removeAttribute('src');
+        }
         // setIsInitialLoading(true); // Set initial loading to true when changing videos
         
         // Record start time for network speed measurement
@@ -213,6 +246,161 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         
         return () => clearTimeout(timer);
     }, [currentIndex, isMuted, measureNetworkSpeed, preloadNextVideo]);
+
+    useEffect(() => {
+        if (!currentVideo || !audioRef.current) {
+            setHasAudioTrack(false);
+            setIsAudioReady(false);
+            return;
+        }
+
+        const audioElement = audioRef.current;
+        let metadata: any = currentVideo.metadata;
+
+        if (typeof metadata === 'string') {
+            try {
+                metadata = JSON.parse(metadata);
+            } catch (error) {
+                console.error('Failed to parse video metadata for audio track:', error);
+                metadata = null;
+            }
+        }
+
+        const isRedditVideo =
+            currentVideo.platform === 'reddit' ||
+            (currentVideo.videoUrl && currentVideo.videoUrl.includes('v.redd.it'));
+        const rawAudioUrl = metadata?.audioUrl;
+
+        if (!isRedditVideo || !rawAudioUrl || typeof rawAudioUrl !== 'string') {
+            audioElement.pause();
+            audioElement.removeAttribute('src');
+            audioElement.load();
+            setHasAudioTrack(false);
+            setIsAudioReady(false);
+            return;
+        }
+
+        const proxiedUrl = getRedditAudioProxyUrl(rawAudioUrl);
+
+        audioElement.src = proxiedUrl;
+        audioElement.load();
+
+        audioElement.preload = 'auto';
+        audioElement.crossOrigin = 'anonymous';
+        audioElement.muted = isMuted;
+        audioElement.loop = isLooping;
+
+        setHasAudioTrack(true);
+        setIsAudioReady(false);
+
+        const handleCanPlay = () => {
+            setIsAudioReady(true);
+            if (!isMuted && isPlaying) {
+                syncMedia(true);
+                const playPromise = audioElement.play();
+                if (playPromise && typeof playPromise.catch === 'function') {
+                    playPromise.catch(err => {
+                        console.error('Error starting Reddit audio playback:', err);
+                    });
+                }
+            }
+        };
+
+        const handleError = (event: Event) => {
+            console.error('Error loading Reddit audio track:', event);
+            setHasAudioTrack(false);
+        };
+
+        audioElement.addEventListener('canplay', handleCanPlay);
+        audioElement.addEventListener('error', handleError);
+
+        return () => {
+            audioElement.removeEventListener('canplay', handleCanPlay);
+            audioElement.removeEventListener('error', handleError);
+        };
+    }, [currentVideo, isMuted, isPlaying, isLooping, syncMedia]);
+
+    useEffect(() => {
+        const videoElement = videoRef.current;
+        const audioElement = audioRef.current;
+
+        if (!videoElement || !audioElement || !hasAudioTrack) {
+            return;
+        }
+
+        const handlePlay = () => {
+            syncMedia(true);
+            if (!isMuted && isAudioReady) {
+                const playPromise = audioElement.play();
+                if (playPromise && typeof playPromise.catch === 'function') {
+                    playPromise.catch(err => {
+                        console.error('Error playing synced Reddit audio:', err);
+                    });
+                }
+            }
+        };
+
+        const handlePause = () => {
+            audioElement.pause();
+        };
+
+        const handleSeek = () => {
+            syncMedia(true);
+        };
+
+        const handleTimeUpdate = () => {
+            syncMedia(false);
+        };
+
+        videoElement.addEventListener('play', handlePlay);
+        videoElement.addEventListener('pause', handlePause);
+        videoElement.addEventListener('seeking', handleSeek);
+        videoElement.addEventListener('seeked', handleSeek);
+        videoElement.addEventListener('timeupdate', handleTimeUpdate);
+
+        return () => {
+            videoElement.removeEventListener('play', handlePlay);
+            videoElement.removeEventListener('pause', handlePause);
+            videoElement.removeEventListener('seeking', handleSeek);
+            videoElement.removeEventListener('seeked', handleSeek);
+            videoElement.removeEventListener('timeupdate', handleTimeUpdate);
+        };
+    }, [hasAudioTrack, isMuted, isAudioReady, syncMedia]);
+
+    useEffect(() => {
+        const videoElement = videoRef.current;
+        const audioElement = audioRef.current;
+
+        if (videoElement) {
+            videoElement.muted = isMuted;
+        }
+
+        if (!audioElement) {
+            return;
+        }
+
+        audioElement.muted = isMuted;
+
+        if (isMuted) {
+            audioElement.pause();
+            return;
+        }
+
+        if (hasAudioTrack && isAudioReady && isPlaying) {
+            syncMedia(true);
+            const playPromise = audioElement.play();
+            if (playPromise && typeof playPromise.catch === 'function') {
+                playPromise.catch(err => {
+                    console.error('Error resuming Reddit audio:', err);
+                });
+            }
+        }
+    }, [isMuted, hasAudioTrack, isAudioReady, isPlaying, syncMedia]);
+
+
+
+
+
 
     useEffect(() => {
         // Hide controls after 3 seconds of inactivity
@@ -277,53 +465,102 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
             
             // Set the new time
             videoRef.current.currentTime = newTime;
+            if (audioRef.current && hasAudioTrack) {
+                audioRef.current.currentTime = newTime;
+            }
         }
     };
 
     const togglePlay = useCallback(() => {
-        if (videoRef.current) {
-            if (isPlaying) {
-                videoRef.current.pause();
-                setIsPlaying(false);
-            } else {
-                // Check if the current position is already buffered
-                const currentTime = videoRef.current.currentTime;
-                const buffered = videoRef.current.buffered;
-                let isBuffered = false;
-                
-                for (let i = 0; i < buffered.length; i++) {
-                    if (currentTime >= buffered.start(i) && currentTime <= buffered.end(i)) {
-                        isBuffered = true;
-                        break;
-                    }
-                }
-                
-                // If already buffered, don't show buffering indicator
-                if (isBuffered) {
-                    setIsBuffering(false);
-                }
-                
-                const playPromise = videoRef.current.play();
-                
-                // Handle play promise
-                if (playPromise !== undefined) {
-                    playPromise
-                        .then(() => {
-                            // Playback started successfully
-                            setIsPlaying(true);
-                            if (isBuffered) {
-                                setIsBuffering(false);
-                            }
-                        })
-                        .catch(e => {
-                            console.error('Error playing video:', e);
-                            setIsPlaying(false);
-                        });
-                }
+        const videoElement = videoRef.current;
+        const audioElement = audioRef.current;
+
+        if (!videoElement) {
+            return;
+        }
+
+        if (isPlaying) {
+            videoElement.pause();
+            if (audioElement) {
+                audioElement.pause();
+            }
+            setIsPlaying(false);
+            return;
+        }
+
+        const currentTime = videoElement.currentTime;
+        const buffered = videoElement.buffered;
+        let isBuffered = false;
+
+        for (let i = 0; i < buffered.length; i++) {
+            if (currentTime >= buffered.start(i) && currentTime <= buffered.end(i)) {
+                isBuffered = true;
+                break;
             }
         }
-    }, [isPlaying]);
+
+        if (isBuffered) {
+            setIsBuffering(false);
+        }
+
+        const playPromise = videoElement.play();
+
+        if (playPromise !== undefined) {
+            playPromise
+                .then(() => {
+                    setIsPlaying(true);
+                    if (isBuffered) {
+                        setIsBuffering(false);
+                    }
+
+                    if (hasAudioTrack && audioElement) {
+                        if (isMuted) {
+                            audioElement.pause();
+                        } else if (isAudioReady) {
+                            syncMedia(true);
+                            const audioPromise = audioElement.play();
+                            if (audioPromise && typeof audioPromise.catch === 'function') {
+                                audioPromise.catch(err => {
+                                    console.error('Error playing Reddit audio track:', err);
+                                });
+                            }
+                        }
+                    }
+                })
+                .catch(e => {
+                    console.error('Error playing video:', e);
+                    setIsPlaying(false);
+                });
+        }
+    }, [hasAudioTrack, isAudioReady, isMuted, isPlaying, syncMedia]);
     
+    const toggleMute = useCallback(() => {
+        setIsMuted((prevMuted) => {
+            const nextMuted = !prevMuted;
+
+            if (videoRef.current) {
+                videoRef.current.muted = nextMuted;
+            }
+
+            if (audioRef.current) {
+                audioRef.current.muted = nextMuted;
+                if (nextMuted) {
+                    audioRef.current.pause();
+                } else if (hasAudioTrack && isAudioReady) {
+                    syncMedia(true);
+                    const playPromise = audioRef.current.play();
+                    if (playPromise && typeof playPromise.catch === 'function') {
+                        playPromise.catch(err => {
+                            console.error('Error enabling Reddit audio playback:', err);
+                        });
+                    }
+                }
+            }
+
+            return nextMuted;
+        });
+    }, [hasAudioTrack, isAudioReady, syncMedia]);
+
     // Format time for display (e.g., 1:23)
     const formatTime = (seconds: number) => {
         const mins = Math.floor(seconds / 60);
@@ -331,7 +568,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
     };
     
-    // Audio functionality has been removed
+    // Reddit audio playback is managed via a secondary audio element
     
     // Handle fullscreen toggle
     const handleFullscreen = () => {
@@ -520,12 +757,24 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
             videoRef.current.src = '';
             videoRef.current.load();
         }
+
+        if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current.removeAttribute('src');
+            audioRef.current.load();
+        }
+
+        setHasAudioTrack(false);
+        setIsAudioReady(false);
+
         // Call the parent onClose function
         onClose();
     };
     
     return (
-        <Dialog
+        <>
+            <audio ref={audioRef} preload="auto" style={{ display: 'none' }} />
+            <Dialog
             open={open}
             onClose={handleClose}
             maxWidth="xl"
@@ -745,7 +994,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                         playsInline
                                         preload="auto"
                                         autoPlay
-                                        muted
+                                        muted={isMuted}
                                         loop={isLooping}
                                         onTimeUpdate={handleTimeUpdate}
                                         onPlay={() => setIsPlaying(true)}
@@ -925,8 +1174,22 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                             {isPlaying ? <PauseIcon /> : <PlayIcon />}
                                         </IconButton>
                                         
-                                        {/* Audio control button removed as requested */}
-                                        
+                                        <IconButton
+                                            onClick={(e) => { e.stopPropagation(); toggleMute(); }}
+                                            disabled={!hasAudioTrack}
+                                            sx={{
+                                                color: isMuted ? 'white' : '#4caf50',
+                                                opacity: hasAudioTrack ? 1 : 0.4,
+                                                padding: { xs: '4px', sm: '8px' },
+                                                '& .MuiSvgIcon-root': {
+                                                    fontSize: { xs: '1.25rem', sm: '1.5rem' }
+                                                }
+                                            }}
+                                            title={hasAudioTrack ? (isMuted ? 'Unmute audio' : 'Mute audio') : 'Audio unavailable'}
+                                        >
+                                            {isMuted ? <VolumeOffIcon /> : <VolumeUpIcon />}
+                                        </IconButton>
+
                                         <IconButton 
                                             onClick={(e) => { e.stopPropagation(); setIsLooping(!isLooping); }}
                                             sx={{ 
@@ -1349,6 +1612,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                 </Box>
             </Box>
         </Dialog>
+        </>
     );
 };
 

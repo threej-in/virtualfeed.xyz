@@ -21,6 +21,7 @@ import {
 } from '@mui/material';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import TrendingButton from '../TrendingButton/TrendingButton';
+import { LanguageDetector, SUPPORTED_LANGUAGES } from '../../utils/languageDetection';
 
 const StyledFormControl = styled(FormControl)(({ theme }) => ({
   background: 'rgba(19, 19, 47, 0.6)',
@@ -111,10 +112,12 @@ interface FiltersProps {
   order: 'asc' | 'desc';
   showNsfw: boolean;
   trending?: '24h' | '48h' | '1w';
+  language?: string;
   onSortByChange: (value: string) => void;
   onOrderChange: (value: 'asc' | 'desc') => void;
   onNsfwChange: (value: boolean) => void;
   onTrendingChange: (period: '24h' | '48h' | '1w' | undefined) => void;
+  onLanguageChange?: (language: string) => void;
   mobileView?: boolean;
   isFallback?: boolean; // Add fallback indicator
 }
@@ -124,10 +127,12 @@ const Filters: React.FC<FiltersProps> = ({
   order,
   showNsfw,
   trending,
+  language = 'english',
   onSortByChange,
   onOrderChange,
   onNsfwChange,
   onTrendingChange,
+  onLanguageChange,
   mobileView = false,
   isFallback = false,
 }) => {
@@ -246,6 +251,48 @@ const Filters: React.FC<FiltersProps> = ({
           <MenuItem value="asc">↑ Asc</MenuItem>
         </Select>
       </StyledFormControl>
+
+      {onLanguageChange && (
+        <StyledFormControl size="small">
+          <InputLabel>Language</InputLabel>
+          <Select
+            value={language}
+            label="Language"
+            onChange={(e) => onLanguageChange(e.target.value)}
+            MenuProps={{
+              PaperProps: {
+                sx: {
+                  backgroundColor: 'rgba(19, 19, 47, 0.95)',
+                  backdropFilter: 'blur(12px)',
+                  border: '1px solid rgba(108, 99, 255, 0.15)',
+                  borderRadius: '12px',
+                  boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2)',
+                  maxHeight: 300,
+                  '& .MuiMenuItem-root': {
+                    color: 'rgba(255, 255, 255, 0.9)',
+                    fontSize: '0.75rem',
+                    '&:hover': {
+                      backgroundColor: 'rgba(108, 99, 255, 0.1)',
+                    },
+                    '&.Mui-selected': {
+                      backgroundColor: 'rgba(108, 99, 255, 0.2)',
+                      '&:hover': {
+                        backgroundColor: 'rgba(108, 99, 255, 0.25)',
+                      },
+                    },
+                  },
+                },
+              },
+            }}
+          >
+            {SUPPORTED_LANGUAGES.map((lang) => (
+              <MenuItem key={lang.code} value={lang.code}>
+                {lang.flag} {lang.name}
+              </MenuItem>
+            ))}
+          </Select>
+        </StyledFormControl>
+      )}
 
       <FormControlLabel
         control={

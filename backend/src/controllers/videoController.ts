@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import Video from '../models/Video';
 import { TrendingService, TRENDING_PERIODS } from '../services/trendingService';
+import { LanguageDetector } from '../utils/languageDetection';
 import axios from 'axios';
 import dotenv from 'dotenv';
 
@@ -20,7 +21,8 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
             subreddit,
             platform,
             showNsfw = 'false',
-            trending
+            trending,
+            language
         } = req.query;
 
         // Handle trending filter
@@ -62,6 +64,14 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
         const limitNum = Number(limit);
         const offset = (pageNum - 1) * limitNum;
         
+        // Detect user's preferred language from Accept-Language header
+        const acceptLanguage = req.headers['accept-language'] as string;
+        const browserLanguage = LanguageDetector.getBrowserLanguage(acceptLanguage);
+        const preferredLanguage = LanguageDetector.mapBrowserLanguageToVideoLanguage(browserLanguage);
+        
+        // Use provided language parameter or fall back to browser language
+        const targetLanguage = (language as string) || preferredLanguage;
+
         const result = await TrendingService.getHomepageVideos(
             limitNum,
             offset,
@@ -69,7 +79,8 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
                 subreddit: subreddit as string,
                 platform: platform as string,
                 search: search as string,
-                showNsfw: showNsfw === 'true'
+                showNsfw: showNsfw === 'true',
+                language: targetLanguage
             },
             sortBy as string,
             order as string

@@ -7,6 +7,7 @@ export interface Video {
     redditId: string;
     subreddit: string;
     platform: string;
+    language?: string; // Added language field
     createdAt: string;
     tags: string[];
     views: number;

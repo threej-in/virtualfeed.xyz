@@ -45,6 +45,7 @@ export class TrendingService {
       platform?: string;
       search?: string;
       showNsfw?: boolean;
+      language?: string;
     } = {}
   ): Promise<{ videos: any[]; total: number }> {
     try {
@@ -68,6 +69,12 @@ export class TrendingService {
       if (filters.search) {
         whereConditions.push('(title LIKE ? OR description LIKE ?)');
         queryParams.push(`%${filters.search}%`, `%${filters.search}%`);
+      }
+      
+      // Add language filter
+      if (filters.language && filters.language !== 'all') {
+        whereConditions.push('(language = ? OR language IS NULL)');
+        queryParams.push(filters.language);
       }
       
       // Add NSFW filter
@@ -264,6 +271,7 @@ export class TrendingService {
       platform?: string;
       search?: string;
       showNsfw?: boolean;
+      language?: string;
     } = {},
     sortBy: string = 'createdAt',
     order: string = 'desc'
@@ -291,6 +299,12 @@ export class TrendingService {
       if (filters.search) {
         baseWhereConditions.push('(title LIKE ? OR description LIKE ?)');
         baseQueryParams.push(`%${filters.search}%`, `%${filters.search}%`);
+      }
+      
+      // Add language filter
+      if (filters.language && filters.language !== 'all') {
+        baseWhereConditions.push('(language = ? OR language IS NULL)');
+        baseQueryParams.push(filters.language);
       }
       
       // Add NSFW filter

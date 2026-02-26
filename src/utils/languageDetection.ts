@@ -7,6 +7,7 @@ export interface SupportedLanguage {
 
 export const SUPPORTED_LANGUAGES: SupportedLanguage[] = [
   { code: 'en', name: 'English', flag: '\u{1F1FA}\u{1F1F8}', locales: ['en', 'en-US', 'en-GB', 'en-CA', 'en-AU'] },
+  { code: 'hi', name: 'Hindi', flag: '\u{1F1EE}\u{1F1F3}', locales: ['hi', 'hi-IN'] },
   { code: 'es', name: 'Spanish', flag: '\u{1F1EA}\u{1F1F8}', locales: ['es', 'es-ES', 'es-MX', 'es-419'] },
   { code: 'fr', name: 'French', flag: '\u{1F1EB}\u{1F1F7}', locales: ['fr', 'fr-FR', 'fr-CA'] },
   { code: 'de', name: 'German', flag: '\u{1F1E9}\u{1F1EA}', locales: ['de', 'de-DE', 'de-AT', 'de-CH'] },

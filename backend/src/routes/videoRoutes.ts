@@ -1,5 +1,5 @@
 import express, { Router } from 'express';
-import { getVideos, updateVideoStats, updateUpvotes, fetchRedditUpvotes, proxyRedditAudio, secureVideoAction } from '../controllers/videoController';
+import { getVideos, updateVideoStats, updateUpvotes, fetchRedditUpvotes, proxyRedditAudio, secureVideoAction, recordVideoEngagement } from '../controllers/videoController';
 import { RedditScraper } from '../services/redditScraper';
 import { logger } from '../services/logger';
 
@@ -61,6 +61,7 @@ router.get('/', getVideos);
 
 
 router.post('/:id/stats', updateVideoStats);
+router.post('/:id/engagement', recordVideoEngagement);
 router.post('/:id/upvotes', updateUpvotes);
 router.get('/reddit-audio', proxyRedditAudio);
 router.get('/:id/reddit-upvotes', fetchRedditUpvotes);

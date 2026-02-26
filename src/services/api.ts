@@ -60,6 +60,16 @@ export const updateVideoStats = async (videoId: string, type: 'view' | 'like'): 
     }
 };
 
+export const likeVideoInternal = async (videoId: string): Promise<{ success: boolean; engagement: { likes: number } }> => {
+    try {
+        const response = await axios.post(`${API_URL}/videos/${videoId}/engagement`, { action: 'like' });
+        return response.data;
+    } catch (error) {
+        console.error(`Error recording internal like for video ${videoId}:`, error);
+        throw error;
+    }
+};
+
 export const updateUpvotes = async (videoId: string, upvotes: number): Promise<Video> => {
     try {
         const response = await axios.post(`${API_URL}/videos/${videoId}/upvotes`, { upvotes });

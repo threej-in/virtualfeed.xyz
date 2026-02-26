@@ -135,7 +135,7 @@ function App() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [filterValues, setFilterValues] = useState({
     limit: 12,
-    sortBy: "createdAt" as "createdAt" | "views" | "likes",
+    sortBy: "views" as "createdAt" | "views" | "likes",
     order: "desc" as "asc" | "desc",
     search: undefined as string | undefined,
     platform: "", // Default to show all platforms
@@ -231,6 +231,7 @@ function App() {
       platform: filterValues.platform,
       showNsfw: filterValues.showNsfw,
       trending: filterValues.trending,
+      language: filterValues.language,
       page: 1,
     });
 
@@ -265,6 +266,7 @@ function App() {
     filterValues.platform,
     filterValues.showNsfw,
     filterValues.trending,
+    filterValues.language,
     loadVideos,
   ]);
 
@@ -502,7 +504,7 @@ function App() {
                   // Reset all filters and return to homepage
                   setFilterValues({
                     limit: 12,
-                    sortBy: "createdAt",
+                    sortBy: "views",
                     order: "desc",
                     search: "",
                     platform: "",
@@ -683,7 +685,7 @@ function App() {
                       // Reset all filters and return to homepage
                       setFilterValues({
                         limit: 12,
-                        sortBy: "createdAt",
+                        sortBy: "views",
                         order: "desc",
                         search: "",
                         platform: "", // Show all platforms by default

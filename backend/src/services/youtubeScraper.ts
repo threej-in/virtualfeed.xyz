@@ -109,6 +109,21 @@ export class YouTubeScraper {
   private static readonly YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
   private static readonly YOUTUBE_API_BASE_URL = 'https://www.googleapis.com/youtube/v3';
   private static readonly MAX_RESULTS = 50; // YouTube API limit
+  private static readonly MIN_VIEW_COUNT = Number(process.env.YOUTUBE_MIN_VIEW_COUNT || 200);
+  private static readonly MIN_LIKE_COUNT = Number(process.env.YOUTUBE_MIN_LIKE_COUNT || 10);
+  private static readonly MIN_DESCRIPTION_LENGTH = Number(process.env.YOUTUBE_MIN_DESCRIPTION_LENGTH || 40);
+  private static readonly LOW_QUALITY_KEYWORDS = [
+    'free fire',
+    'pubg',
+    'bgmi',
+    'status video',
+    'whatsapp status',
+    'lyrics',
+    'shayari',
+    'fan edit',
+    'template',
+    'vs edit'
+  ];
 
   static async scrapeYouTubeVideos(maxPages?: number, searchTermLimit?: number): Promise<number> {
     try {
@@ -287,6 +302,13 @@ export class YouTubeScraper {
         return false;
       }
 
+      const viewCount = parseInt(videoDetails.statistics.viewCount) || 0;
+      const likeCount = parseInt(videoDetails.statistics.likeCount) || 0;
+      if (this.isLowQualityVideo(video, viewCount, likeCount)) {
+        logger.info(`Skipping low-quality YouTube video: ${video.snippet.title}`);
+        return false;
+      }
+
       logger.info(`Processing AI-related video under 5 minutes: ${video.snippet.title} (${durationInSeconds}s)`);
 
       // Extract thumbnail URL (prefer maxres, fallback to high)
@@ -316,7 +338,7 @@ export class YouTubeScraper {
         subreddit: 'youtube',
         tags,
         nsfw: false,
-        likes: parseInt(videoDetails.statistics.likeCount) || 0,
+        likes: likeCount,
         platform: 'youtube',
         language: languageDetection.language,
         metadata: {
@@ -331,7 +353,7 @@ export class YouTubeScraper {
           format: 'mp4',
           searchTerm: searchTerm,
           channelTitle: video.snippet.channelTitle || 'Unknown Channel',
-          viewCount: parseInt(videoDetails.statistics.viewCount) || 0,
+          viewCount,
           commentCount: parseInt(videoDetails.statistics.commentCount) || 0,
           languageDetection: {
             language: languageDetection.language,
@@ -356,7 +378,7 @@ export class YouTubeScraper {
         await Video.create({
           ...videoData,
           createdAt: new Date(video.snippet.publishedAt),
-          views: parseInt(videoDetails.statistics.viewCount) || 0,
+          views: viewCount,
           blacklisted: false
         });
 
@@ -387,6 +409,31 @@ export class YouTubeScraper {
       });
       return false;
     }
+  }
+
+  private static isLowQualityVideo(
+    video: YouTubeSearchItem,
+    viewCount: number,
+    likeCount: number
+  ): boolean {
+    const title = (video.snippet.title || '').toLowerCase();
+    const description = (video.snippet.description || '').trim();
+    const tags = video.snippet.tags || [];
+
+    const hasLowQualityKeyword = this.LOW_QUALITY_KEYWORDS.some((keyword) => title.includes(keyword));
+    if (hasLowQualityKeyword) {
+      return true;
+    }
+
+    const hasWeakEngagement =
+      viewCount < this.MIN_VIEW_COUNT &&
+      likeCount < this.MIN_LIKE_COUNT;
+
+    const hasWeakContentSignals =
+      description.length < this.MIN_DESCRIPTION_LENGTH &&
+      tags.length < 3;
+
+    return hasWeakEngagement && hasWeakContentSignals;
   }
 
   private static async getVideoDetails(videoId: string): Promise<YouTubeVideoItem | null> {

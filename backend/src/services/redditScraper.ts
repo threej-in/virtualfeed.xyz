@@ -9,6 +9,21 @@ import * as fs from 'fs';
 import * as crypto from 'crypto';
 
 export class RedditScraper {
+    private static getRedditPreviewThumbnail(post: Submission): string | null {
+        const previewUrl = (post as any)?.preview?.images?.[0]?.source?.url;
+        if (typeof previewUrl === 'string' && previewUrl.startsWith('http')) {
+            // Reddit returns escaped URLs like "&amp;"
+            return previewUrl.replace(/&amp;/g, '&');
+        }
+
+        const thumb = (post as any)?.thumbnail;
+        if (typeof thumb === 'string' && thumb.startsWith('http')) {
+            return thumb;
+        }
+
+        return null;
+    }
+
     private static async processPost(post: Submission, subredditConfig: SubredditConfig, isManualSubmission: boolean = false): Promise<boolean> {
         try {
             // Log post details for debugging - only at debug level
@@ -148,8 +163,13 @@ export class RedditScraper {
                 return false;
             }
 
-            // Generate thumbnail - use enhanced URL handling for Reddit videos
+            // Prefer Reddit-provided preview thumbnails to avoid ffmpeg failures.
             let thumbnailUrl = '';
+            const redditPreviewThumbnail = this.getRedditPreviewThumbnail(post);
+            if (redditPreviewThumbnail) {
+                thumbnailUrl = redditPreviewThumbnail;
+            }
+
             if (videoMetadata.url.includes('v.redd.it') && videoId) {
                 // For Reddit videos, use the video ID to create multiple URL formats to try
                 const urlFormats = [
@@ -160,22 +180,24 @@ export class RedditScraper {
                     `https://v.redd.it/${videoId}/DASH_96.mp4`  // Lowest quality
                 ];
                 
-                // Try each URL format until thumbnail generation succeeds
-                let thumbnailGenerated = false;
-                for (const url of urlFormats) {
-                    try {
-                        thumbnailUrl = await VideoProcessor.generateThumbnail(url);
-                        thumbnailGenerated = true;
-                        break;
-                    } catch (thumbnailError) {
-                        logger.debug(`Failed to generate thumbnail with URL: ${url}`);
-                        // Continue to next format
+                // Only attempt ffmpeg thumbnail generation if we do not already have a usable preview thumbnail.
+                if (!thumbnailUrl) {
+                    let thumbnailGenerated = false;
+                    for (const url of urlFormats) {
+                        try {
+                            thumbnailUrl = await VideoProcessor.generateThumbnail(url);
+                            thumbnailGenerated = true;
+                            break;
+                        } catch (thumbnailError) {
+                            logger.debug(`Failed to generate thumbnail with URL: ${url}`);
+                            // Continue to next format
+                        }
                     }
-                }
-                
-                if (!thumbnailGenerated) {
-                    // If all formats failed, try the default method
-                    thumbnailUrl = await VideoProcessor.generateThumbnail(videoMetadata.url);
+
+                    if (!thumbnailGenerated) {
+                        // If all formats failed, try the default method
+                        thumbnailUrl = await VideoProcessor.generateThumbnail(videoMetadata.url);
+                    }
                 }
                 
                 // Ensure thumbnailUrl is never undefined
@@ -203,7 +225,9 @@ export class RedditScraper {
                 }
             } else {
                 // For non-Reddit videos, use the standard method
-                thumbnailUrl = await VideoProcessor.generateThumbnail(videoMetadata.url);
+                if (!thumbnailUrl) {
+                    thumbnailUrl = await VideoProcessor.generateThumbnail(videoMetadata.url);
+                }
                 
                 // Ensure thumbnailUrl is never undefined for non-Reddit videos too
                 if (!thumbnailUrl) {
@@ -347,6 +371,18 @@ export class RedditScraper {
         try {
             // Check if subreddit exists and is accessible
             try {
+                // Get new posts first so fresh content is picked up quickly
+                const newPosts = await redditClient.getSubreddit(subredditName).getNew({ limit: 50 });
+                for (const post of newPosts) {
+                    if (!seenIds.has(post.id) && !existingRedditIds.includes(post.id)) {
+                        posts.push(post);
+                        seenIds.add(post.id);
+                    }
+                }
+
+                // Add delay between API calls to avoid rate limiting
+                await this.delay(2000); // 2 second delay
+
                 // Get hot posts with reduced limit (25 instead of 100)
                 const hotPosts = await redditClient.getSubreddit(subredditName).getHot({ limit: 25 });
                 for (const post of hotPosts) {

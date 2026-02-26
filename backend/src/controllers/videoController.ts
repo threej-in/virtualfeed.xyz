@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import Video from '../models/Video';
 import { TrendingService, TRENDING_PERIODS } from '../services/trendingService';
 import { LanguageDetector } from '../utils/languageDetection';
+import { filterAvailableVideos } from '../utils/videoAvailability';
+import { buildFeedMemoryKey, getRecentFeedIds, rememberFeedIds } from '../utils/feedMemory';
 import axios from 'axios';
 import dotenv from 'dotenv';
 
@@ -10,13 +12,49 @@ dotenv.config();
 // Secret code for secure actions
 const SECURE_ACTION_SECRET = process.env.SECURE_ACTION_SECRET || 'default-secret-change-me';
 
+const REDDIT_REQUEST_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+    'Accept': '*/*',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Connection': 'keep-alive',
+    'Range': 'bytes=0-',
+    'Referer': 'https://www.reddit.com/',
+    'Origin': 'https://www.reddit.com'
+};
+
+const buildRedditAudioCandidates = (url: string): string[] => {
+    const candidates = [url];
+    const match = url.match(/https?:\/\/v\.redd\.it\/([^/?]+)\//i);
+    const videoId = match?.[1];
+
+    if (!videoId) {
+        return candidates;
+    }
+
+    const variants = [
+        `https://v.redd.it/${videoId}/DASH_AUDIO_128.mp4`,
+        `https://v.redd.it/${videoId}/DASH_audio.mp4`,
+        `https://v.redd.it/${videoId}/DASH_AUDIO_64.mp4`,
+        `https://v.redd.it/${videoId}/audio`,
+        `https://v.redd.it/${videoId}/audio.mp4`
+    ];
+
+    for (const variant of variants) {
+        if (!candidates.includes(variant)) {
+            candidates.push(variant);
+        }
+    }
+
+    return candidates;
+};
+
 export const getVideos = async (req: Request, res: Response): Promise<void> => {
     try {
         const { 
             page = 1, 
             limit = 12,
             search,
-            sortBy = 'createdAt',
+            sortBy = 'views',
             order = 'desc',
             subreddit,
             platform,
@@ -24,6 +62,15 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
             trending,
             language
         } = req.query;
+
+        const feedMemoryKey = buildFeedMemoryKey(
+            req.headers['x-forwarded-for'] as string | undefined,
+            req.socket?.remoteAddress,
+            req.headers['user-agent'] as string | undefined,
+            req.headers['accept-language'] as string | undefined
+        );
+        const recentIds = getRecentFeedIds(feedMemoryKey);
+        const normalizedSelectedLanguage = LanguageDetector.normalizeVideoLanguageFilter(language as string | undefined);
 
         // Handle trending filter
         if (trending && typeof trending === 'string') {
@@ -41,12 +88,17 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
                         subreddit: subreddit as string,
                         platform: platform as string,
                         search: search as string,
-                        showNsfw: showNsfw === 'true'
+                        showNsfw: showNsfw === 'true',
+                        language: normalizedSelectedLanguage,
+                        excludeVideoIds: recentIds
                     }
                 );
+
+                const availableVideos = await filterAvailableVideos(result.videos);
+                rememberFeedIds(feedMemoryKey, availableVideos.map((video: any) => video.id).filter(Boolean));
                 
                 res.json({
-                    videos: result.videos,
+                    videos: availableVideos,
                     total: result.total,
                     pages: Math.ceil(result.total / limitNum),
                     currentPage: pageNum,
@@ -70,7 +122,7 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
         const preferredLanguage = LanguageDetector.mapBrowserLanguageToVideoLanguage(browserLanguage);
         
         // Use provided language parameter or fall back to browser language
-        const targetLanguage = (language as string) || preferredLanguage;
+        const targetLanguage = normalizedSelectedLanguage || preferredLanguage;
 
         const result = await TrendingService.getHomepageVideos(
             limitNum,
@@ -80,14 +132,18 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
                 platform: platform as string,
                 search: search as string,
                 showNsfw: showNsfw === 'true',
-                language: targetLanguage
+                language: targetLanguage,
+                excludeVideoIds: recentIds
             },
             sortBy as string,
             order as string
         );
+
+        const availableVideos = await filterAvailableVideos(result.videos);
+        rememberFeedIds(feedMemoryKey, availableVideos.map((video: any) => video.id).filter(Boolean));
         
         res.json({
-            videos: result.videos,
+            videos: availableVideos,
             total: result.total,
             pages: Math.ceil(result.total / limitNum),
             currentPage: pageNum,
@@ -203,6 +259,52 @@ export const updateVideoStats = async (req: Request, res: Response): Promise<voi
     }
 };
 
+export const recordVideoEngagement = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const { action = 'like' } = req.body || {};
+
+        if (action !== 'like') {
+            res.status(400).json({ message: 'Unsupported engagement action' });
+            return;
+        }
+
+        const video = await Video.findByPk(id);
+        if (!video) {
+            res.status(404).json({ message: 'Video not found' });
+            return;
+        }
+
+        const currentMetadata =
+            video.metadata && typeof video.metadata === 'object'
+                ? { ...(video.metadata as any) }
+                : {};
+
+        const previousLikes = Number(currentMetadata.internalLikes || currentMetadata.internalEngagement?.likes || 0);
+        const nextLikes = previousLikes + 1;
+
+        currentMetadata.internalLikes = nextLikes;
+        currentMetadata.internalEngagement = {
+            ...(currentMetadata.internalEngagement || {}),
+            likes: nextLikes,
+            lastLikedAt: new Date().toISOString()
+        };
+
+        await video.update({ metadata: currentMetadata });
+
+        res.json({
+            success: true,
+            videoId: video.id,
+            engagement: {
+                likes: nextLikes
+            }
+        });
+    } catch (error) {
+        console.error('Error recording video engagement:', error);
+        res.status(500).json({ message: 'Error recording video engagement' });
+    }
+};
+
 export const updateUpvotes = async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
@@ -296,21 +398,29 @@ export const proxyRedditAudio = async (req: Request, res: Response): Promise<voi
         }
         
         try {
-            const response = await axios({
-                method: 'get',
-                url: url,
-                responseType: 'stream',
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                    'Accept': '*/*',
-                    'Accept-Encoding': 'gzip, deflate, br',
-                    'Connection': 'keep-alive',
-                    'Range': 'bytes=0-',
-                    'Referer': 'https://www.reddit.com/',
-                    'Origin': 'https://www.reddit.com'
-                },
-                timeout: 10000 // 10 seconds timeout
-            });
+            const candidateUrls = buildRedditAudioCandidates(url);
+            let response: any = null;
+            let lastError: any = null;
+
+            for (const candidateUrl of candidateUrls) {
+                try {
+                    response = await axios({
+                        method: 'get',
+                        url: candidateUrl,
+                        responseType: 'stream',
+                        headers: REDDIT_REQUEST_HEADERS,
+                        timeout: 10000
+                    });
+
+                    break;
+                } catch (candidateError: any) {
+                    lastError = candidateError;
+                }
+            }
+
+            if (!response) {
+                throw lastError || new Error('Failed to fetch Reddit audio from all known URL variants');
+            }
             
             // Set appropriate headers
             res.setHeader('Content-Type', response.headers['content-type'] || 'audio/mp4');

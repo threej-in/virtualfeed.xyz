@@ -13,6 +13,101 @@ export const TRENDING_PERIODS: TrendingPeriod[] = [
 ];
 
 export class TrendingService {
+  private static getHomepageStage(pageIndex: number): {
+    label: string;
+    windows: Array<{ days: number | null; weight: number }>;
+  } {
+    if (pageIndex < 2) {
+      // First screens: mostly this week's winners with some month/all-time variety.
+      return {
+        label: 'weekly_popular',
+        windows: [
+          { days: 7, weight: 0.7 },
+          { days: 30, weight: 0.2 },
+          { days: null, weight: 0.1 },
+        ],
+      };
+    }
+
+    if (pageIndex < 6) {
+      // Mid scroll: shift towards monthly/popular archive.
+      return {
+        label: 'monthly_hits',
+        windows: [
+          { days: 30, weight: 0.5 },
+          { days: 90, weight: 0.3 },
+          { days: null, weight: 0.2 },
+        ],
+      };
+    }
+
+    // Deep scroll: longer tail and evergreen popular content.
+    return {
+      label: 'evergreen_mix',
+      windows: [
+        { days: 90, weight: 0.4 },
+        { days: null, weight: 0.6 },
+      ],
+    };
+  }
+
+  private static getDiversifiedOrderClause(finalSortBy: string, finalOrder: 'ASC' | 'DESC'): string {
+    // Keep popularity-first ordering but rotate ties day-by-day to reduce "same exact feed" fatigue.
+    if (finalSortBy === 'views') {
+      return `views ${finalOrder}, likes DESC, MOD(id + DAYOFYEAR(CURDATE()), 17) ASC, createdAt DESC`;
+    }
+
+    if (finalSortBy === 'likes') {
+      return `likes ${finalOrder}, views DESC, MOD(id + DAYOFYEAR(CURDATE()), 17) ASC, createdAt DESC`;
+    }
+
+    return `${finalSortBy} ${finalOrder}, views DESC, likes DESC`;
+  }
+
+  private static splitLimit(limit: number, weights: number[]): number[] {
+    if (limit <= 0 || weights.length === 0) return [];
+
+    const raw = weights.map((w) => Math.max(0, Math.floor(limit * w)));
+    let assigned = raw.reduce((sum, n) => sum + n, 0);
+
+    // Ensure each bucket can contribute at least one item when possible.
+    for (let i = 0; i < raw.length && assigned < limit; i++) {
+      if (raw[i] === 0) {
+        raw[i] = 1;
+        assigned++;
+      }
+    }
+
+    // Distribute remaining slots by weight order.
+    let guard = 0;
+    while (assigned < limit && guard < 500) {
+      guard++;
+      let bestIdx = 0;
+      for (let i = 1; i < weights.length; i++) {
+        if (weights[i] > weights[bestIdx]) bestIdx = i;
+      }
+      raw[bestIdx]++;
+      assigned++;
+    }
+
+    // Trim overflow if any.
+    guard = 0;
+    while (assigned > limit && guard < 500) {
+      guard++;
+      let worstIdx = -1;
+      for (let i = 0; i < raw.length; i++) {
+        if (raw[i] > 1 && (worstIdx === -1 || weights[i] < weights[worstIdx])) {
+          worstIdx = i;
+        }
+      }
+      if (worstIdx === -1) break;
+      raw[worstIdx]--;
+      assigned--;
+    }
+
+    return raw;
+  }
+
   /**
    * Calculate trending score based on views and time since posting
    * Higher score = more trending (more views in shorter time)
@@ -46,6 +141,7 @@ export class TrendingService {
       search?: string;
       showNsfw?: boolean;
       language?: string;
+      excludeVideoIds?: number[];
     } = {}
   ): Promise<{ videos: any[]; total: number }> {
     try {
@@ -73,7 +169,7 @@ export class TrendingService {
       
       // Add language filter
       if (filters.language && filters.language !== 'all') {
-        whereConditions.push('(language = ? OR language IS NULL)');
+        whereConditions.push('language = ?');
         queryParams.push(filters.language);
       }
       
@@ -84,6 +180,12 @@ export class TrendingService {
       
       // Always exclude blacklisted videos
       whereConditions.push('(blacklisted = 0 OR blacklisted IS NULL)');
+
+      if (filters.excludeVideoIds && filters.excludeVideoIds.length > 0) {
+        const placeholders = new Array(filters.excludeVideoIds.length).fill('?').join(',');
+        whereConditions.push(`id NOT IN (${placeholders})`);
+        queryParams.push(...filters.excludeVideoIds);
+      }
       
       const whereClause = whereConditions.length > 0 
         ? `WHERE ${whereConditions.join(' AND ')}` 
@@ -272,8 +374,9 @@ export class TrendingService {
       search?: string;
       showNsfw?: boolean;
       language?: string;
+      excludeVideoIds?: number[];
     } = {},
-    sortBy: string = 'createdAt',
+    sortBy: string = 'views',
     order: string = 'desc'
   ): Promise<{ videos: any[]; total: number }> {
     try {
@@ -303,7 +406,7 @@ export class TrendingService {
       
       // Add language filter
       if (filters.language && filters.language !== 'all') {
-        baseWhereConditions.push('(language = ? OR language IS NULL)');
+        baseWhereConditions.push('language = ?');
         baseQueryParams.push(filters.language);
       }
       
@@ -314,6 +417,12 @@ export class TrendingService {
       
       // Always exclude blacklisted videos
       baseWhereConditions.push('(blacklisted = 0 OR blacklisted IS NULL)');
+
+      if (filters.excludeVideoIds && filters.excludeVideoIds.length > 0) {
+        const placeholders = new Array(filters.excludeVideoIds.length).fill('?').join(',');
+        baseWhereConditions.push(`id NOT IN (${placeholders})`);
+        baseQueryParams.push(...filters.excludeVideoIds);
+      }
       
       const baseWhereClause = baseWhereConditions.length > 0 
         ? `WHERE ${baseWhereConditions.join(' AND ')}` 
@@ -329,22 +438,110 @@ export class TrendingService {
       const finalSortBy = validSortFields.includes(sortBy) ? sortBy : 'createdAt';
       const finalOrder = order === 'asc' ? 'ASC' : 'DESC';
 
-      // Simple query to get videos with proper sorting
-      const videosQuery = `
-        SELECT 
-          *,
-          TIMESTAMPDIFF(HOUR, createdAt, NOW()) as hours_since_posted,
-          views as total_views
-        FROM videos 
-        ${baseWhereClause}
-        ORDER BY ${finalSortBy} ${finalOrder}
-        LIMIT ${limit} OFFSET ${offset}
-      `;
-      
-      const [videos] = await db.query(videosQuery, { replacements: baseQueryParams });
+      const pageIndex = Math.floor(offset / Math.max(limit, 1));
+      const stage = this.getHomepageStage(pageIndex);
+      const perBucketLimits = this.splitLimit(limit, stage.windows.map(w => w.weight));
+      const orderClause = this.getDiversifiedOrderClause(finalSortBy, finalOrder);
+
+      const selectedVideos: any[] = [];
+      const selectedIds = new Set<number>();
+
+      for (let i = 0; i < stage.windows.length; i++) {
+        const bucket = stage.windows[i];
+        const bucketLimit = perBucketLimits[i] || 0;
+        if (bucketLimit <= 0) continue;
+
+        const bucketWhereConditions = [...baseWhereConditions];
+        const bucketQueryParams = [...baseQueryParams];
+
+        if (bucket.days !== null) {
+          bucketWhereConditions.push('createdAt >= ?');
+          bucketQueryParams.push(new Date(Date.now() - bucket.days * 24 * 60 * 60 * 1000));
+        }
+
+        if (selectedIds.size > 0) {
+          const placeholders = new Array(selectedIds.size).fill('?').join(',');
+          bucketWhereConditions.push(`id NOT IN (${placeholders})`);
+          bucketQueryParams.push(...Array.from(selectedIds));
+        }
+
+        const bucketWhereClause = bucketWhereConditions.length > 0
+          ? `WHERE ${bucketWhereConditions.join(' AND ')}`
+          : '';
+
+        const bucketOffset = pageIndex * bucketLimit;
+        const bucketQuery = `
+          SELECT
+            *,
+            TIMESTAMPDIFF(HOUR, createdAt, NOW()) as hours_since_posted,
+            views as total_views
+          FROM videos
+          ${bucketWhereClause}
+          ORDER BY ${orderClause}
+          LIMIT ${bucketLimit} OFFSET ${bucketOffset}
+        `;
+
+        const [bucketVideos] = await db.query(bucketQuery, { replacements: bucketQueryParams });
+        for (const video of bucketVideos as any[]) {
+          if (selectedIds.has(video.id)) continue;
+          selectedIds.add(video.id);
+          selectedVideos.push({
+            ...video,
+            homepageSource: {
+              stage: stage.label,
+              windowDays: bucket.days,
+            },
+          });
+          if (selectedVideos.length >= limit) break;
+        }
+
+        if (selectedVideos.length >= limit) break;
+      }
+
+      // Backfill if a stage bucket doesn't have enough rows.
+      if (selectedVideos.length < limit) {
+        const remaining = limit - selectedVideos.length;
+        const backfillWhereConditions = [...baseWhereConditions];
+        const backfillQueryParams = [...baseQueryParams];
+
+        if (selectedIds.size > 0) {
+          const placeholders = new Array(selectedIds.size).fill('?').join(',');
+          backfillWhereConditions.push(`id NOT IN (${placeholders})`);
+          backfillQueryParams.push(...Array.from(selectedIds));
+        }
+
+        const backfillWhereClause = backfillWhereConditions.length > 0
+          ? `WHERE ${backfillWhereConditions.join(' AND ')}`
+          : '';
+
+        const backfillQuery = `
+          SELECT
+            *,
+            TIMESTAMPDIFF(HOUR, createdAt, NOW()) as hours_since_posted,
+            views as total_views
+          FROM videos
+          ${backfillWhereClause}
+          ORDER BY ${orderClause}
+          LIMIT ${remaining} OFFSET ${pageIndex * remaining}
+        `;
+
+        const [backfillVideos] = await db.query(backfillQuery, { replacements: backfillQueryParams });
+        for (const video of backfillVideos as any[]) {
+          if (selectedIds.has(video.id)) continue;
+          selectedIds.add(video.id);
+          selectedVideos.push({
+            ...video,
+            homepageSource: {
+              stage: stage.label,
+              windowDays: null,
+            },
+          });
+          if (selectedVideos.length >= limit) break;
+        }
+      }
       
       // Transform results with basic trending info
-      const transformedVideos = videos.map((video: any) => {
+      const transformedVideos = selectedVideos.map((video: any) => {
         const hoursSincePosted = video.hours_since_posted || 1;
         const trendingScore = this.calculateTrendingScore(video.total_views, hoursSincePosted);
         

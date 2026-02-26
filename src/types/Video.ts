@@ -26,6 +26,11 @@ export interface Video {
         youtubeId?: string;
         youtubeUrl?: string;
         publishedAt?: string;
+        internalLikes?: number;
+        internalEngagement?: {
+            likes?: number;
+            lastLikedAt?: string;
+        };
     };
     // Trending information (optional)
     trending?: {

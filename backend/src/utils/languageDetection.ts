@@ -119,6 +119,42 @@ export interface LanguageDetectionResult {
 }
 
 export class LanguageDetector {
+  static normalizeVideoLanguageFilter(language: string | undefined | null): string | undefined {
+    if (!language) return undefined;
+
+    const normalized = language.toLowerCase().trim();
+    if (!normalized || normalized === 'all') return 'all';
+
+    const map: Record<string, string> = {
+      en: 'english',
+      english: 'english',
+      hi: 'hindi',
+      hindi: 'hindi',
+      ar: 'arabic',
+      arabic: 'arabic',
+      zh: 'chinese',
+      chinese: 'chinese',
+      ja: 'japanese',
+      japanese: 'japanese',
+      ko: 'korean',
+      korean: 'korean',
+      ru: 'russian',
+      russian: 'russian',
+      es: 'spanish',
+      spanish: 'spanish',
+      fr: 'french',
+      french: 'french',
+      de: 'german',
+      german: 'german',
+      pt: 'portuguese',
+      portuguese: 'portuguese',
+      it: 'italian',
+      italian: 'italian',
+    };
+
+    return map[normalized] || 'english';
+  }
+
   /**
    * Detect the primary language of text content
    */

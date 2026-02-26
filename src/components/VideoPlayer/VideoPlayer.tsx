@@ -8,7 +8,8 @@ import {
     Chip,
     Stack,
     Fade,
-    useTheme
+    useTheme,
+    useMediaQuery
 } from '@mui/material';
 import { 
     Close as CloseIcon, 
@@ -30,7 +31,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSwipeable } from 'react-swipeable';
 import { Video } from '../../types/Video';
-import { updateVideoStats, getRedditAudioProxyUrl } from '../../services/api';
+import { updateVideoStats, getRedditAudioProxyUrl, likeVideoInternal } from '../../services/api';
 
 interface VideoPlayerProps {
     videos: Video[];
@@ -42,6 +43,7 @@ interface VideoPlayerProps {
 
 const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, open, onClose, onTagClick }) => {
     const theme = useTheme();
+    const isSmallDevice = useMediaQuery(theme.breakpoints.down('sm'));
     // const isMobile = useMediaQuery(theme.breakpoints.down('md'));
     // const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
     
@@ -61,13 +63,17 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
     const [youtubeLoading, setYoutubeLoading] = useState(false);
     const [hasAudioTrack, setHasAudioTrack] = useState(false);
     const [isAudioReady, setIsAudioReady] = useState(false);
+    const [internalLikeCount, setInternalLikeCount] = useState(0);
+    const [hasLikedCurrent, setHasLikedCurrent] = useState(false);
     // const [isInitialLoading, setIsInitialLoading] = useState(true);
     // const [networkSpeed, setNetworkSpeed] = useState<number | null>(null); // Kept for compatibility
     
     const videoRef = useRef<HTMLVideoElement>(null);
     const audioRef = useRef<HTMLAudioElement>(null);
+    const nextVideoPreloadRef = useRef<HTMLVideoElement>(null);
     const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const loadStartTimeRef = useRef<number>(0);
+    const [nextYouTubeEmbedUrl, setNextYouTubeEmbedUrl] = useState('');
     // const nextVideoRef = useRef<HTMLVideoElement | null>(null);
     
     // Update currentIndex when initialVideoIndex changes
@@ -91,6 +97,32 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
             updateVideoStats(currentVideo.id.toString(), 'view');
         }
     }, [currentVideo, open]);
+
+    useEffect(() => {
+        if (!currentVideo) {
+            setInternalLikeCount(0);
+            setHasLikedCurrent(false);
+            return;
+        }
+
+        let metadata: any = currentVideo.metadata;
+        if (typeof metadata === 'string') {
+            try {
+                metadata = JSON.parse(metadata);
+            } catch {
+                metadata = {};
+            }
+        }
+
+        const internalLikes = Number(metadata?.internalLikes || metadata?.internalEngagement?.likes || 0);
+        setInternalLikeCount(Number.isFinite(internalLikes) ? internalLikes : 0);
+
+        try {
+            setHasLikedCurrent(localStorage.getItem(`vf:liked:${currentVideo.id}`) === '1');
+        } catch {
+            setHasLikedCurrent(false);
+        }
+    }, [currentVideo]);
     
     // Measure network speed when loading video (simplified)
     const measureNetworkSpeed = useCallback(() => {
@@ -106,17 +138,18 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
     // Get YouTube embed URL
     const getYouTubeEmbedUrl = useCallback((video: Video) => {
         const youtubeId = video.metadata?.youtubeId;
+        const params = 'autoplay=1&mute=1&controls=0&rel=0&modestbranding=1&disablekb=1&fs=0&iv_load_policy=3&playsinline=1&loop=1';
         
         if (youtubeId) {
-            const embedUrl = `https://www.youtube.com/embed/${youtubeId}?autoplay=1&mute=1&rel=0&modestbranding=1&controls=0&loop=1&playlist=${youtubeId}&disablekb=1&fs=0&iv_load_policy=3&showinfo=0&playsinline=1`;
+            const embedUrl = `https://www.youtube-nocookie.com/embed/${youtubeId}?${params}&playlist=${youtubeId}`;
             return embedUrl;
         }
         
         // Fallback to videoUrl if youtubeId is not available
         if (video.videoUrl && video.videoUrl.includes('youtube.com')) {
-            const videoId = video.videoUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/)?.[1];
+            const videoId = video.videoUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/)?.[1];
             if (videoId) {
-                const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&rel=0&modestbranding=1&controls=0&loop=1&playlist=${videoId}&disablekb=1&fs=0&iv_load_policy=3&showinfo=0&playsinline=1`;
+                const embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?${params}&playlist=${videoId}`;
                 return embedUrl;
             }
         }
@@ -153,10 +186,36 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
 
         // Preload function is now disabled to reduce network usage
     const preloadNextVideo = useCallback(() => {
-        // Preloading is disabled to prevent excessive network usage
-        // This function is kept as a placeholder to maintain code structure
-        return;
-    }, []);
+        if (!open || !videos.length) {
+            return;
+        }
+
+        const nextIndex = currentIndex + 1;
+        if (nextIndex >= videos.length) {
+            setNextYouTubeEmbedUrl('');
+            if (nextVideoPreloadRef.current) {
+                nextVideoPreloadRef.current.removeAttribute('src');
+                nextVideoPreloadRef.current.load();
+            }
+            return;
+        }
+
+        const nextVideo = videos[nextIndex];
+        if (nextVideo.platform === 'youtube') {
+            setNextYouTubeEmbedUrl(getYouTubeEmbedUrl(nextVideo));
+            if (nextVideoPreloadRef.current) {
+                nextVideoPreloadRef.current.removeAttribute('src');
+                nextVideoPreloadRef.current.load();
+            }
+        } else {
+            setNextYouTubeEmbedUrl('');
+            if (nextVideoPreloadRef.current) {
+                nextVideoPreloadRef.current.src = getVideoUrl(nextVideo.videoUrl);
+                nextVideoPreloadRef.current.preload = 'auto';
+                nextVideoPreloadRef.current.load();
+            }
+        }
+    }, [open, videos, currentIndex, getYouTubeEmbedUrl, getVideoUrl]);
 
     const syncMedia = useCallback((force = false) => {
         const videoElement = videoRef.current;
@@ -217,8 +276,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                     // setIsInitialLoading(false); // Mark initial loading as complete once video can play
                     measureNetworkSpeed();
                     
-                    // Preloading next video is disabled to reduce network usage
-                    // preloadNextVideo(); - removed to prevent excessive network usage
+                    preloadNextVideo();
                 };
                 
                 // Use a variable to track if we're currently attempting to play
@@ -248,6 +306,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
     }, [currentIndex, isMuted, measureNetworkSpeed, preloadNextVideo]);
 
     useEffect(() => {
+        preloadNextVideo();
+    }, [preloadNextVideo]);
+
+    useEffect(() => {
         if (!currentVideo || !audioRef.current) {
             setHasAudioTrack(false);
             setIsAudioReady(false);
@@ -269,7 +331,15 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         const isRedditVideo =
             currentVideo.platform === 'reddit' ||
             (currentVideo.videoUrl && currentVideo.videoUrl.includes('v.redd.it'));
-        const rawAudioUrl = metadata?.audioUrl;
+        let rawAudioUrl = metadata?.audioUrl;
+
+        if ((!rawAudioUrl || typeof rawAudioUrl !== 'string') && isRedditVideo && currentVideo.videoUrl) {
+            const match = currentVideo.videoUrl.match(/v\.redd\.it\/([^/?]+)/i);
+            const videoId = match?.[1];
+            if (videoId) {
+                rawAudioUrl = `https://v.redd.it/${videoId}/DASH_AUDIO_128.mp4`;
+            }
+        }
 
         if (!isRedditVideo || !rawAudioUrl || typeof rawAudioUrl !== 'string') {
             audioElement.pause();
@@ -579,19 +649,25 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         }
     };
 
-    const handleLike = () => {
-        if (currentVideo) {
-            // Call API to update like count
-            updateVideoStats(currentVideo.id.toString(), 'like');
-            
-            // Since we can't modify the videos prop directly, we'll just update the UI locally
-            // This is just a visual update - the actual data won't be modified
-            // On next render or page refresh, the data will revert to server state
-            const likeChip = document.querySelector('.video-likes-chip .MuiChip-label');
-            if (likeChip) {
-                const newLikeCount = currentVideo.likes + 1;
-                likeChip.textContent = newLikeCount.toLocaleString();
-            }
+    const handleLike = async () => {
+        if (!currentVideo || hasLikedCurrent) {
+            return;
+        }
+
+        try {
+            const result = await likeVideoInternal(currentVideo.id.toString());
+            const serverLikes = Number(result?.engagement?.likes);
+            setInternalLikeCount(prev => (Number.isFinite(serverLikes) ? serverLikes : prev + 1));
+        } catch (error) {
+            console.error('Error sending internal like:', error);
+            setInternalLikeCount(prev => prev + 1);
+        }
+
+        setHasLikedCurrent(true);
+        try {
+            localStorage.setItem(`vf:liked:${currentVideo.id}`, '1');
+        } catch {
+            // Ignore local storage failures.
         }
     };
 
@@ -774,6 +850,15 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
     return (
         <>
             <audio ref={audioRef} preload="auto" style={{ display: 'none' }} />
+            <video ref={nextVideoPreloadRef} muted playsInline preload="auto" style={{ display: 'none' }} />
+            {nextYouTubeEmbedUrl && (
+                <iframe
+                    src={nextYouTubeEmbedUrl}
+                    title="preload-next-youtube"
+                    style={{ display: 'none' }}
+                    aria-hidden="true"
+                />
+            )}
             <Dialog
             open={open}
             onClose={handleClose}
@@ -782,8 +867,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
             PaperProps={{
                 sx: {
                     backgroundColor: '#000',
-                    height: { xs: 'calc(100vh - 60px)', md: '100vh' },
-                    maxHeight: { xs: 'calc(100vh - 60px)', md: '100vh' },
+                    height: { xs: '100dvh', md: '100vh' },
+                    maxHeight: { xs: '100dvh', md: '100vh' },
                     margin: 0,
                     borderRadius: 0,
                     overflow: 'hidden'
@@ -794,8 +879,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                     m: 0,
                     width: '100%',
                     maxWidth: '100%',
-                    height: { xs: 'calc(100vh - 60px)', md: '100vh' },
-                    maxHeight: { xs: 'calc(100vh - 60px)', md: '100vh' }
+                    height: { xs: '100dvh', md: '100vh' },
+                    maxHeight: { xs: '100dvh', md: '100vh' }
                 }
             }}
         >
@@ -818,9 +903,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                         alignItems: 'center',
                         justifyContent: 'center',
                         overflow: 'hidden',
-                        // Account for header height (60px) on mobile
-                        height: { xs: 'calc(100vh - 60px)', md: '100%' },
-                        maxHeight: { xs: 'calc(100vh - 60px)', md: '100vh' },
+                        height: { xs: '100dvh', md: '100%' },
+                        maxHeight: { xs: '100dvh', md: '100vh' },
                         cursor: swipeDirection ? (swipeDirection === 'Left' ? 'e-resize' : 'w-resize') : 'default'
                     }}
                     onMouseMove={() => setShowControls(true)}
@@ -943,13 +1027,14 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                             <iframe
                                                 src={getYouTubeEmbedUrl(currentVideo)}
                                                 style={{
-                                                    width: '100%',
-                                                    height: '100%',
+                                                    width: isSmallDevice ? '100vw' : '100%',
+                                                    height: isSmallDevice ? '100dvh' : '100%',
                                                     border: 'none',
-                                                    maxHeight: '100vh',
-                                                    transition: 'filter 0.3s ease'
+                                                    maxHeight: isSmallDevice ? '100dvh' : '100vh',
+                                                    transition: 'filter 0.3s ease',
+                                                    pointerEvents: isSmallDevice ? 'none' : 'auto'
                                                 }}
-                                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                                allow="autoplay; encrypted-media; picture-in-picture"
                                                 allowFullScreen
                                                 onLoad={() => {
                                                     setYoutubeLoading(false);
@@ -985,8 +1070,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                         style={{
                                             width: '100%',
                                             height: '100%',
-                                            objectFit: 'contain',
-                                            maxHeight: 'calc(100vh - 60px)',
+                                            objectFit: isSmallDevice ? 'cover' : 'contain',
+                                            maxHeight: isSmallDevice ? '100dvh' : '100vh',
                                             maxWidth: '100%',
                                             transition: 'filter 0.3s ease'
                                         }}
@@ -1489,7 +1574,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                             <Chip 
                                 className="video-likes-chip"
                                 icon={<FavoriteIcon fontSize="small" sx={{ color: '#F06292' }} />} 
-                                label={(currentVideo.likes || 0).toLocaleString()} 
+                                label={`App ${internalLikeCount.toLocaleString()}`} 
                                 variant="filled" 
                                 size="small"
                                 onClick={(e) => { e.stopPropagation(); handleLike(); }}
@@ -1497,8 +1582,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                     backgroundColor: 'rgba(233, 30, 99, 0.15)',
                                     color: '#F48FB1',
                                     fontWeight: 500,
-                                    cursor: 'pointer',
-                                    '&:hover': { backgroundColor: 'rgba(233, 30, 99, 0.25)' },
+                                    cursor: hasLikedCurrent ? 'default' : 'pointer',
+                                    opacity: hasLikedCurrent ? 0.75 : 1,
+                                    '&:hover': { backgroundColor: hasLikedCurrent ? 'rgba(233, 30, 99, 0.15)' : 'rgba(233, 30, 99, 0.25)' },
                                     '& .MuiChip-icon': { color: '#F06292' }
                                 }}
                             />

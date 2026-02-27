@@ -28,16 +28,19 @@
         "web-vitals": "^2.1.4"
     },
     "scripts": {
-        "start": "npm run start:prod",
-        "build": "react-scripts build",
+        "start": "react-scripts start",
+        "frontend:dev": "react-scripts start",
+        "frontend:build": "react-scripts build",
         "test": "react-scripts test",
         "eject": "react-scripts eject",
         "backend:dev": "npm run dev --prefix backend",
         "backend:start": "npm run start --prefix backend",
         "backend:build": "npm run build --prefix backend",
-        "dev": "npm run build && npm run backend:dev",
-        "build:full": "npm run build && npm run backend:build",
-        "start:prod": "npm run build:full && node backend/dist/index.js",
+        "dev": "concurrently \"npm run frontend:dev\" \"npm run backend:dev\"",
+        "build": "npm run frontend:build",
+        "build:full": "npm run frontend:build && npm run backend:build",
+        "start:prod": "node backend/dist/index.js",
+        "start:prod:scrape": "node backend/dist/index.js --enable-scraping",
         "postinstall": "npm install --prefix backend"
     },
     "eslintConfig": {
@@ -58,7 +61,7 @@
             "last 1 safari version"
         ]
     },
-    "proxy": "http://localhost:5000",
+    "proxy": "http://localhost:3002",
     "devDependencies": {
         "concurrently": "^8.2.2"
     }

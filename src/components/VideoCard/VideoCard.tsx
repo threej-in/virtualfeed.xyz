@@ -13,6 +13,8 @@ interface VideoCardProps {
     isFocused?: boolean;
     isPlaying?: boolean;
     isLargeDevice?: boolean;
+    onHoverStart?: () => void;
+    onHoverEnd?: () => void;
 }
 
 // Simple styled components for VideoCard
@@ -77,7 +79,7 @@ const ThumbnailOverlay = styled(Box)(({ theme }) => ({
     },
 }));
 
-const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, isFocused = false, isPlaying = false, isLargeDevice = false }) => {
+const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, isFocused = false, isPlaying = false, isLargeDevice = false, onHoverStart, onHoverEnd }) => {
     const [imageLoading, setImageLoading] = useState(true);
     const [thumbnailUrl, setThumbnailUrl] = useState<string>(video.thumbnailUrl || '');
     const [retryCount, setRetryCount] = useState(0);
@@ -260,7 +262,16 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, isFocused = false
 
     return (
         <StyledCard ref={cardRef} title={video.id + ""}>
-            <CardActionArea onClick={onClick} sx={{ position: 'relative' }}>
+            <CardActionArea
+                onClick={onClick}
+                onMouseEnter={() => {
+                    if (isLargeDevice) onHoverStart?.();
+                }}
+                onMouseLeave={() => {
+                    if (isLargeDevice) onHoverEnd?.();
+                }}
+                sx={{ position: 'relative' }}
+            >
                 {/* Single container for both skeleton and image to ensure consistent sizing */}
                 <Box sx={{
                     position: 'relative',

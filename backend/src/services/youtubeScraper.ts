@@ -322,7 +322,7 @@ export class YouTubeScraper {
       const tags = this.extractTags(video.snippet.title, video.snippet.description, searchTerm, video.snippet.tags);
 
       // Detect language from video content
-      const languageDetection = LanguageDetector.detectVideoLanguage({
+      const languageDetection = await LanguageDetector.detectVideoLanguage({
         title: video.snippet.title,
         description: video.snippet.description,
         tags: video.snippet.tags || []

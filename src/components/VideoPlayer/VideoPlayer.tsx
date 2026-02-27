@@ -70,6 +70,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
     
     const videoRef = useRef<HTMLVideoElement>(null);
     const audioRef = useRef<HTMLAudioElement>(null);
+    const youtubeIframeRef = useRef<HTMLIFrameElement>(null);
     const nextVideoPreloadRef = useRef<HTMLVideoElement>(null);
     const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const loadStartTimeRef = useRef<number>(0);
@@ -123,6 +124,17 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
             setHasLikedCurrent(false);
         }
     }, [currentVideo]);
+
+    useEffect(() => {
+        if (!currentVideo) {
+            return;
+        }
+
+        if (currentVideo.platform === 'youtube') {
+            setHasAudioTrack(true);
+            setIsAudioReady(true);
+        }
+    }, [currentVideo]);
     
     // Measure network speed when loading video (simplified)
     const measureNetworkSpeed = useCallback(() => {
@@ -138,7 +150,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
     // Get YouTube embed URL
     const getYouTubeEmbedUrl = useCallback((video: Video) => {
         const youtubeId = video.metadata?.youtubeId;
-        const params = 'autoplay=1&mute=1&controls=0&rel=0&modestbranding=1&disablekb=1&fs=0&iv_load_policy=3&playsinline=1&loop=1';
+        const params = 'autoplay=1&mute=1&controls=0&rel=0&modestbranding=1&disablekb=1&fs=0&iv_load_policy=3&playsinline=1&loop=1&enablejsapi=1';
         
         if (youtubeId) {
             const embedUrl = `https://www.youtube-nocookie.com/embed/${youtubeId}?${params}&playlist=${youtubeId}`;
@@ -608,6 +620,21 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         setIsMuted((prevMuted) => {
             const nextMuted = !prevMuted;
 
+            if (currentVideo?.platform === 'youtube' && youtubeIframeRef.current?.contentWindow) {
+                try {
+                    youtubeIframeRef.current.contentWindow.postMessage(
+                        JSON.stringify({
+                            event: 'command',
+                            func: nextMuted ? 'mute' : 'unMute',
+                            args: []
+                        }),
+                        '*'
+                    );
+                } catch (error) {
+                    console.error('Error toggling YouTube mute state:', error);
+                }
+            }
+
             if (videoRef.current) {
                 videoRef.current.muted = nextMuted;
             }
@@ -629,7 +656,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
 
             return nextMuted;
         });
-    }, [hasAudioTrack, isAudioReady, syncMedia]);
+    }, [currentVideo, hasAudioTrack, isAudioReady, syncMedia]);
 
     // Format time for display (e.g., 1:23)
     const formatTime = (seconds: number) => {
@@ -1025,6 +1052,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                         )}
                                         {getYouTubeEmbedUrl(currentVideo) ? (
                                             <iframe
+                                                ref={youtubeIframeRef}
                                                 src={getYouTubeEmbedUrl(currentVideo)}
                                                 style={{
                                                     width: isSmallDevice ? '100vw' : '100%',

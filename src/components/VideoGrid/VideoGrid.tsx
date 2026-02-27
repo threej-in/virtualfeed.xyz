@@ -14,9 +14,11 @@ interface VideoGridProps {
     focusedVideoId?: number | null;
     videoFocusObserver?: React.RefObject<IntersectionObserver | null>;
     isLargeDevice?: boolean;
+    onDesktopVideoHoverStart?: (videoId: number) => void;
+    onDesktopVideoHoverEnd?: (videoId: number) => void;
 }
 
-const VideoGrid: React.FC<VideoGridProps> = ({ videos, onVideoClick, lastVideoRef, onResetFilters, playingVideoId, focusedVideoId, videoFocusObserver, isLargeDevice }) => {
+const VideoGrid: React.FC<VideoGridProps> = ({ videos, onVideoClick, lastVideoRef, onResetFilters, playingVideoId, focusedVideoId, videoFocusObserver, isLargeDevice, onDesktopVideoHoverStart, onDesktopVideoHoverEnd }) => {
     // Cleanup observers when videos change
     useEffect(() => {
         return () => {
@@ -152,6 +154,8 @@ const VideoGrid: React.FC<VideoGridProps> = ({ videos, onVideoClick, lastVideoRe
                             isPlaying={playingVideoId === video.id}
                             isFocused={focusedVideoId === video.id}
                             isLargeDevice={isLargeDevice}
+                            onHoverStart={() => onDesktopVideoHoverStart?.(video.id)}
+                            onHoverEnd={() => onDesktopVideoHoverEnd?.(video.id)}
                         />
                     ) : (
                         <VideoCard 
@@ -160,6 +164,8 @@ const VideoGrid: React.FC<VideoGridProps> = ({ videos, onVideoClick, lastVideoRe
                             isFocused={focusedVideoId === video.id} 
                             isPlaying={playingVideoId === video.id}
                             isLargeDevice={isLargeDevice}
+                            onHoverStart={() => onDesktopVideoHoverStart?.(video.id)}
+                            onHoverEnd={() => onDesktopVideoHoverEnd?.(video.id)}
                         />
                     )}
                 </Grid>

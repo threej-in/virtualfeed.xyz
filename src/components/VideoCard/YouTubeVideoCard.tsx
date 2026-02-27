@@ -28,6 +28,8 @@ interface YouTubeVideoCardProps {
   isPlaying?: boolean;
   isFocused?: boolean;
   isLargeDevice?: boolean;
+  onHoverStart?: () => void;
+  onHoverEnd?: () => void;
 }
 
 const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
@@ -37,6 +39,8 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
   isPlaying = false,
   isFocused = false,
   isLargeDevice = false,
+  onHoverStart,
+  onHoverEnd,
 }) => {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
@@ -96,7 +100,7 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
   const getYouTubeEmbedUrl = (video: Video): string => {
     const videoId = video.metadata?.youtubeId || video.videoUrl?.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/)?.[1];
     if (videoId) {
-      return `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1&controls=1`;
+      return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1&controls=0`;
     }
     return video.videoUrl || '';
   };
@@ -206,6 +210,12 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
           },
         }}
         onClick={() => onVideoClick(video)}
+        onMouseEnter={() => {
+          if (isLargeDevice) onHoverStart?.();
+        }}
+        onMouseLeave={() => {
+          if (isLargeDevice) onHoverEnd?.();
+        }}
       >
         <Box sx={{ 
           position: 'relative', 

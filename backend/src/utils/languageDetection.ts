@@ -1,4 +1,5 @@
 import { logger } from '../services/logger';
+import { loadModule } from 'cld3-asm';
 
 // Language detection patterns
 const LANGUAGE_PATTERNS = {
@@ -112,53 +113,188 @@ const ENGLISH_WORDS = [
   'will', 'would', 'could', 'should', 'may', 'might', 'can', 'must', 'shall'
 ];
 
+const ROMANIZED_HINDI_MARKERS = [
+  'hai', 'hain', 'nahi', 'nhi', 'kya', 'kyun', 'kaise', 'kaisa', 'kaisi', 'mera', 'meri', 'mere',
+  'tera', 'teri', 'tere', 'tum', 'aap', 'hum', 'ham', 'haan', 'acha', 'accha', 'sahi', 'yaar',
+  'bhai', 'behen', 'sab', 'kar', 'karo', 'karta', 'karti', 'karna', 'ho', 'hoga', 'hogi', 'abhi',
+  'dekho', 'sun', 'wala', 'wali', 'wale', 'apna', 'apni', 'apne', 'kyuki', 'lekin'
+];
+
 export interface LanguageDetectionResult {
   language: string;
   confidence: number;
-  detectedBy: 'patterns' | 'keywords' | 'fallback';
+  detectedBy: 'cld3' | 'patterns' | 'keywords' | 'fallback';
 }
 
 export class LanguageDetector {
+  private static cldFactoryPromise: Promise<any> | null = null;
+  private static cldIdentifier: any | null = null;
+  private static cldUnavailable = false;
+
+  private static readonly LANGUAGE_CODE_MAP: Record<string, string> = {
+    english: 'en',
+    hindi: 'hi',
+    arabic: 'ar',
+    chinese: 'zh',
+    japanese: 'ja',
+    korean: 'ko',
+    russian: 'ru',
+    spanish: 'es',
+    french: 'fr',
+    german: 'de',
+    portuguese: 'pt',
+    italian: 'it',
+  };
+
+  private static readonly CODE_TO_LEGACY_NAME_MAP: Record<string, string> = Object.entries(LanguageDetector.LANGUAGE_CODE_MAP).reduce(
+    (acc, [legacyName, code]) => {
+      acc[code] = legacyName;
+      return acc;
+    },
+    {} as Record<string, string>
+  );
+
+  private static toLanguageCode(value: string): string {
+    if (!value) return 'en';
+    const normalized = value.toLowerCase().trim();
+    return this.LANGUAGE_CODE_MAP[normalized] || normalized;
+  }
+
+  private static async getCldIdentifier(): Promise<any | null> {
+    if (this.cldUnavailable) {
+      return null;
+    }
+
+    if (this.cldIdentifier) {
+      return this.cldIdentifier;
+    }
+
+    if (!this.cldFactoryPromise) {
+      this.cldFactoryPromise = loadModule({ timeout: 3000 }).catch((error: any) => {
+        logger.warn('Unable to initialize cld3-asm, using heuristic language detection fallback', error);
+        return null;
+      });
+    }
+
+    const cldFactory = await this.cldFactoryPromise;
+    if (!cldFactory) {
+      return null;
+    }
+
+    try {
+      this.cldIdentifier = cldFactory.create(0, 1000);
+      return this.cldIdentifier;
+    } catch (error) {
+      logger.warn('Unable to create cld3 language identifier, using heuristic fallback', error);
+      this.cldUnavailable = true;
+      return null;
+    }
+  }
+
+  private static mapCldLanguageToSupported(code: string | undefined): string | null {
+    if (!code) return null;
+    const normalized = code.toLowerCase().split('-')[0];
+
+    const map: Record<string, string> = {
+      en: 'en',
+      hi: 'hi',
+      ar: 'ar',
+      zh: 'zh',
+      ja: 'ja',
+      ko: 'ko',
+      ru: 'ru',
+      es: 'es',
+      fr: 'fr',
+      de: 'de',
+      pt: 'pt',
+      it: 'it',
+      ur: 'hi',
+      bn: 'hi',
+      pa: 'hi',
+      gu: 'hi',
+      mr: 'hi',
+      fa: 'ar',
+      he: 'ar',
+      iw: 'ar',
+      uk: 'ru',
+      bg: 'ru',
+      sr: 'ru',
+      be: 'ru'
+    };
+
+    return map[normalized] || null;
+  }
+
+  private static detectHinglishInRomanScript(text: string): LanguageDetectionResult | null {
+    const normalized = (text || '').toLowerCase();
+    if (!normalized) return null;
+
+    // Devanagari directly implies Hindi-family content.
+    if (/[\u0900-\u097F]/.test(normalized)) {
+      return { language: 'hi', confidence: 95, detectedBy: 'patterns' };
+    }
+
+    const asciiOnly = normalized.replace(/[^a-z0-9\s]/g, ' ');
+    const tokens = asciiOnly.split(/\s+/).filter(Boolean);
+    if (tokens.length < 4) return null;
+
+    const markerHits = tokens.filter((token) => ROMANIZED_HINDI_MARKERS.includes(token)).length;
+    if (markerHits < 2) return null;
+
+    const englishHits = ENGLISH_WORDS.filter((word) =>
+      asciiOnly.includes(` ${word} `) || asciiOnly.startsWith(`${word} `) || asciiOnly.endsWith(` ${word}`)
+    ).length;
+
+    // Hinglish is usually mixed: at least two Hindi markers with some English presence.
+    if (englishHits >= 1) {
+      return {
+        language: 'hi',
+        confidence: Math.min(95, 60 + markerHits * 8),
+        detectedBy: 'keywords'
+      };
+    }
+
+    // Pure romanized Hindi can still be treated as Hindi for audio expectations.
+    if (markerHits >= 3) {
+      return {
+        language: 'hi',
+        confidence: Math.min(90, 55 + markerHits * 8),
+        detectedBy: 'keywords'
+      };
+    }
+
+    return null;
+  }
+
   static normalizeVideoLanguageFilter(language: string | undefined | null): string | undefined {
     if (!language) return undefined;
 
     const normalized = language.toLowerCase().trim();
     if (!normalized || normalized === 'all') return 'all';
 
-    const map: Record<string, string> = {
-      en: 'english',
-      english: 'english',
-      hi: 'hindi',
-      hindi: 'hindi',
-      ar: 'arabic',
-      arabic: 'arabic',
-      zh: 'chinese',
-      chinese: 'chinese',
-      ja: 'japanese',
-      japanese: 'japanese',
-      ko: 'korean',
-      korean: 'korean',
-      ru: 'russian',
-      russian: 'russian',
-      es: 'spanish',
-      spanish: 'spanish',
-      fr: 'french',
-      french: 'french',
-      de: 'german',
-      german: 'german',
-      pt: 'portuguese',
-      portuguese: 'portuguese',
-      it: 'italian',
-      italian: 'italian',
-    };
+    if (this.CODE_TO_LEGACY_NAME_MAP[normalized]) return normalized;
+    if (this.LANGUAGE_CODE_MAP[normalized]) return this.LANGUAGE_CODE_MAP[normalized];
+    return 'en';
+  }
 
-    return map[normalized] || 'english';
+  static getLanguageQueryValues(language: string | undefined | null): string[] {
+    const normalized = this.normalizeVideoLanguageFilter(language);
+    if (!normalized || normalized === 'all') {
+      return [];
+    }
+
+    const values = new Set<string>([normalized]);
+    const legacy = this.CODE_TO_LEGACY_NAME_MAP[normalized];
+    if (legacy) {
+      values.add(legacy);
+    }
+    return Array.from(values);
   }
 
   /**
-   * Detect the primary language of text content
+   * Heuristic fallback when CLD is unavailable or uncertain.
    */
-  static detectLanguage(text: string): LanguageDetectionResult {
+  private static detectLanguageHeuristic(text: string): LanguageDetectionResult {
     if (!text || text.trim().length === 0) {
       return { language: 'unknown', confidence: 0, detectedBy: 'fallback' };
     }
@@ -193,7 +329,7 @@ export class LanguageDetector {
       
       if (confidence > bestMatch.confidence) {
         bestMatch = {
-          language,
+          language: this.toLanguageCode(language),
           confidence,
           detectedBy: patternMatches > 0 ? 'patterns' : keywordMatches > 0 ? 'keywords' : 'fallback'
         };
@@ -210,7 +346,7 @@ export class LanguageDetector {
       
       if (englishWords.length > 0) {
         bestMatch = {
-          language: 'english',
+          language: 'en',
           confidence: Math.min(100, englishWords.length * 5),
           detectedBy: 'keywords'
         };
@@ -221,13 +357,60 @@ export class LanguageDetector {
   }
 
   /**
+   * Detect the primary language of text content.
+   * Uses cld3-asm first, then falls back to heuristic matching.
+   */
+  static async detectLanguage(text: string): Promise<LanguageDetectionResult> {
+    if (!text || text.trim().length === 0) {
+      return { language: 'unknown', confidence: 0, detectedBy: 'fallback' };
+    }
+
+    const hinglishSignal = this.detectHinglishInRomanScript(text);
+
+    try {
+      const identifier = await this.getCldIdentifier();
+      if (identifier) {
+        const cldResult = identifier.findLanguage(text);
+        const mappedLanguage = this.mapCldLanguageToSupported(cldResult?.language);
+        const probability = Number(cldResult?.probability || 0);
+        const confidence = Math.max(0, Math.min(100, Math.round(probability * 100)));
+
+        // Force Hinglish to Hindi when romanized Hindi markers are strong.
+        if (hinglishSignal && (mappedLanguage === 'en' || !mappedLanguage || confidence < 75)) {
+          return {
+            language: 'hi',
+            confidence: Math.max(hinglishSignal.confidence, confidence),
+            detectedBy: hinglishSignal.detectedBy
+          };
+        }
+
+        if (mappedLanguage && confidence >= 55) {
+          return {
+            language: mappedLanguage,
+            confidence,
+            detectedBy: 'cld3'
+          };
+        }
+      }
+    } catch (error) {
+      logger.warn('cld3 language detection failed, using heuristic fallback', error);
+    }
+
+    if (hinglishSignal) {
+      return hinglishSignal;
+    }
+
+    return this.detectLanguageHeuristic(text);
+  }
+
+  /**
    * Detect language from video metadata (title, description, tags)
    */
-  static detectVideoLanguage(videoData: {
+  static async detectVideoLanguage(videoData: {
     title?: string;
     description?: string;
     tags?: string[];
-  }): LanguageDetectionResult {
+  }): Promise<LanguageDetectionResult> {
     const textToAnalyze = [
       videoData.title || '',
       videoData.description || '',
@@ -263,31 +446,31 @@ export class LanguageDetector {
    */
   static mapBrowserLanguageToVideoLanguage(browserLang: string): string {
     const languageMap: { [key: string]: string } = {
-      'en': 'english',
-      'hi': 'hindi',
-      'ar': 'arabic',
-      'zh': 'chinese',
-      'ja': 'japanese',
-      'ko': 'korean',
-      'ru': 'russian',
-      'es': 'spanish',
-      'fr': 'french',
-      'de': 'german',
-      'pt': 'portuguese',
-      'it': 'italian',
-      'ur': 'hindi', // Urdu videos often mixed with Hindi
-      'bn': 'hindi', // Bengali often mixed with Hindi content
-      'pa': 'hindi', // Punjabi often mixed with Hindi content
-      'gu': 'hindi', // Gujarati often mixed with Hindi content
-      'mr': 'hindi', // Marathi often mixed with Hindi content
-      'fa': 'arabic', // Persian/Farsi
-      'he': 'arabic', // Hebrew
-      'uk': 'russian', // Ukrainian
-      'be': 'russian', // Belarusian
-      'bg': 'russian', // Bulgarian
-      'sr': 'russian', // Serbian
+      'en': 'en',
+      'hi': 'hi',
+      'ar': 'ar',
+      'zh': 'zh',
+      'ja': 'ja',
+      'ko': 'ko',
+      'ru': 'ru',
+      'es': 'es',
+      'fr': 'fr',
+      'de': 'de',
+      'pt': 'pt',
+      'it': 'it',
+      'ur': 'hi', // Urdu videos often mixed with Hindi
+      'bn': 'hi', // Bengali often mixed with Hindi content
+      'pa': 'hi', // Punjabi often mixed with Hindi content
+      'gu': 'hi', // Gujarati often mixed with Hindi content
+      'mr': 'hi', // Marathi often mixed with Hindi content
+      'fa': 'ar', // Persian/Farsi
+      'he': 'ar', // Hebrew
+      'uk': 'ru', // Ukrainian
+      'be': 'ru', // Belarusian
+      'bg': 'ru', // Bulgarian
+      'sr': 'ru', // Serbian
     };
 
-    return languageMap[browserLang] || 'english';
+    return languageMap[browserLang] || 'en';
   }
 } 

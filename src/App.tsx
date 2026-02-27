@@ -309,6 +309,8 @@ function App() {
   useEffect(() => {
     // Only enable autoplay on mobile devices
     if (isLargeDevice) {
+      setPlayingVideoId(null);
+      setFocusedVideoId(null);
       return;
     }
 
@@ -329,7 +331,7 @@ function App() {
         });
 
         // Stop all videos first, then start the most focused video
-        if (mostFocusedVideoId && highestRatio >= 0.7) {
+        if (mostFocusedVideoId && highestRatio >= 0.55) {
           setPlayingVideoId(mostFocusedVideoId);
           setFocusedVideoId(mostFocusedVideoId);
         } else {
@@ -349,6 +351,14 @@ function App() {
       }
     };
   }, [videos, isLargeDevice]);
+
+  // Ensure first video starts automatically on small devices at page load.
+  useEffect(() => {
+    if (!isLargeDevice && videos.length > 0 && playingVideoId === null) {
+      setPlayingVideoId(videos[0].id);
+      setFocusedVideoId(videos[0].id);
+    }
+  }, [videos, isLargeDevice, playingVideoId]);
 
   // Add scroll event listener as backup for infinite scrolling with snap scrolling
   useEffect(() => {
@@ -681,6 +691,18 @@ function App() {
                     focusedVideoId={focusedVideoId}
                     videoFocusObserver={videoFocusObserver}
                     isLargeDevice={isLargeDevice}
+                    onDesktopVideoHoverStart={(videoId) => {
+                      if (isLargeDevice) {
+                        setPlayingVideoId(videoId);
+                        setFocusedVideoId(videoId);
+                      }
+                    }}
+                    onDesktopVideoHoverEnd={(videoId) => {
+                      if (isLargeDevice && playingVideoId === videoId) {
+                        setPlayingVideoId(null);
+                        setFocusedVideoId(null);
+                      }
+                    }}
                     onResetFilters={() => {
                       // Reset all filters and return to homepage
                       setFilterValues({

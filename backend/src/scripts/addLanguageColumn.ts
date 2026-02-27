@@ -23,7 +23,7 @@ const addLanguageColumn = async () => {
     for (const video of videos) {
       try {
         // Detect language from video content
-        const languageDetection = LanguageDetector.detectVideoLanguage({
+        const languageDetection = await LanguageDetector.detectVideoLanguage({
           title: video.title || '',
           description: video.description || '',
           tags: video.tags || []

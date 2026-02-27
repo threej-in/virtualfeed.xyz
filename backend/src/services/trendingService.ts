@@ -1,5 +1,6 @@
 import Video from '../models/Video';
 import { logger } from './logger';
+import { LanguageDetector } from '../utils/languageDetection';
 
 export interface TrendingPeriod {
   label: string;
@@ -168,9 +169,13 @@ export class TrendingService {
       }
       
       // Add language filter
-      if (filters.language && filters.language !== 'all') {
+      const languageQueryValues = LanguageDetector.getLanguageQueryValues(filters.language);
+      if (languageQueryValues.length === 1) {
         whereConditions.push('language = ?');
-        queryParams.push(filters.language);
+        queryParams.push(languageQueryValues[0]);
+      } else if (languageQueryValues.length > 1) {
+        whereConditions.push(`language IN (${new Array(languageQueryValues.length).fill('?').join(',')})`);
+        queryParams.push(...languageQueryValues);
       }
       
       // Add NSFW filter
@@ -405,9 +410,13 @@ export class TrendingService {
       }
       
       // Add language filter
-      if (filters.language && filters.language !== 'all') {
+      const languageQueryValues = LanguageDetector.getLanguageQueryValues(filters.language);
+      if (languageQueryValues.length === 1) {
         baseWhereConditions.push('language = ?');
-        baseQueryParams.push(filters.language);
+        baseQueryParams.push(languageQueryValues[0]);
+      } else if (languageQueryValues.length > 1) {
+        baseWhereConditions.push(`language IN (${new Array(languageQueryValues.length).fill('?').join(',')})`);
+        baseQueryParams.push(...languageQueryValues);
       }
       
       // Add NSFW filter

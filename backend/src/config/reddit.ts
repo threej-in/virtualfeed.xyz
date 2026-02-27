@@ -1,7 +1,8 @@
 import Snoowrap from 'snoowrap';
 import dotenv from 'dotenv';
+import path from 'path';
 
-dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 export const redditClient = new Snoowrap({
     userAgent: 'virtualfeed-app',

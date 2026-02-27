@@ -49,8 +49,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
     
     const [currentIndex, setCurrentIndex] = useState(initialVideoIndex);
     const [isPlaying, setIsPlaying] = useState(false);
-    // Start muted to satisfy autoplay policies; users can enable sound manually
-    const [isMuted, setIsMuted] = useState(true);
+    // Keep mobile muted for autoplay policy, but allow desktop YouTube playback with sound.
+    const [isMuted, setIsMuted] = useState(isSmallDevice);
     const [isLooping, setIsLooping] = useState(true);
     const [progress, setProgress] = useState(0);
     const [currentTime, setCurrentTime] = useState(0);
@@ -150,7 +150,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
     // Get YouTube embed URL
     const getYouTubeEmbedUrl = useCallback((video: Video) => {
         const youtubeId = video.metadata?.youtubeId;
-        const params = 'autoplay=1&mute=1&controls=0&rel=0&modestbranding=1&disablekb=1&fs=0&iv_load_policy=3&playsinline=1&loop=1&enablejsapi=1';
+        const muteParam = isSmallDevice ? '1' : '0';
+        const params = `autoplay=1&mute=${muteParam}&controls=0&rel=0&modestbranding=1&disablekb=1&fs=0&iv_load_policy=3&playsinline=1&loop=1&enablejsapi=1`;
         
         if (youtubeId) {
             const embedUrl = `https://www.youtube-nocookie.com/embed/${youtubeId}?${params}&playlist=${youtubeId}`;
@@ -167,7 +168,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         }
         
         return '';
-    }, []);
+    }, [isSmallDevice]);
 
     // Get video URL for Reddit videos with multiple formats
     const getVideoUrl = useCallback((url: string) => {
@@ -325,6 +326,16 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         if (!currentVideo || !audioRef.current) {
             setHasAudioTrack(false);
             setIsAudioReady(false);
+            return;
+        }
+
+        if (currentVideo.platform === 'youtube') {
+            // YouTube audio is handled by the iframe player itself.
+            setHasAudioTrack(true);
+            setIsAudioReady(true);
+            audioRef.current.pause();
+            audioRef.current.removeAttribute('src');
+            audioRef.current.load();
             return;
         }
 

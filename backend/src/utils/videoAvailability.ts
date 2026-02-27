@@ -57,6 +57,11 @@ export async function filterAvailableVideos<T extends { platform?: string }>(
   }
 
   const checks = videos.map(async (video) => {
+    const thumbnailUrl = (video as any)?.thumbnailUrl;
+    if (typeof thumbnailUrl !== 'string' || thumbnailUrl.trim().length === 0) {
+      return false;
+    }
+
     if (video.platform !== 'youtube') {
       return true;
     }
@@ -72,4 +77,3 @@ export async function filterAvailableVideos<T extends { platform?: string }>(
   const results = await Promise.all(checks);
   return videos.filter((_, index) => results[index]);
 }
-

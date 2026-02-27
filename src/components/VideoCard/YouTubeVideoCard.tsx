@@ -100,7 +100,8 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
   const getYouTubeEmbedUrl = (video: Video): string => {
     const videoId = video.metadata?.youtubeId || video.videoUrl?.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/)?.[1];
     if (videoId) {
-      return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1&controls=0`;
+      const muteParam = isLargeDevice ? '0' : '1';
+      return `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&mute=${muteParam}&playsinline=1&rel=0&modestbranding=1&controls=0&iv_load_policy=3&fs=0&disablekb=1&loop=1&playlist=${videoId}`;
     }
     return video.videoUrl || '';
   };
@@ -319,8 +320,8 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
                   top: 0,
                   left: 0,
                   width: '100%',
-                  height: '100vh',
-                  maxHeight: '100vh',
+                  height: '100%',
+                  maxHeight: '100%',
                   border: 'none',
                   borderRadius: 'inherit',
                   opacity: videoLoading ? 0 : 1,

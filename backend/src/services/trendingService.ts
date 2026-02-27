@@ -185,6 +185,7 @@ export class TrendingService {
       
       // Always exclude blacklisted videos
       whereConditions.push('(blacklisted = 0 OR blacklisted IS NULL)');
+      whereConditions.push("(thumbnailUrl IS NOT NULL AND TRIM(thumbnailUrl) <> '')");
 
       if (filters.excludeVideoIds && filters.excludeVideoIds.length > 0) {
         const placeholders = new Array(filters.excludeVideoIds.length).fill('?').join(',');
@@ -426,6 +427,7 @@ export class TrendingService {
       
       // Always exclude blacklisted videos
       baseWhereConditions.push('(blacklisted = 0 OR blacklisted IS NULL)');
+      baseWhereConditions.push("(thumbnailUrl IS NOT NULL AND TRIM(thumbnailUrl) <> '')");
 
       if (filters.excludeVideoIds && filters.excludeVideoIds.length > 0) {
         const placeholders = new Array(filters.excludeVideoIds.length).fill('?').join(',');

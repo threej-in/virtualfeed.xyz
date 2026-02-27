@@ -81,6 +81,12 @@ const Header = styled(Box)(({ theme }) => ({
     gap: theme.spacing(0.5),
     padding: theme.spacing(0.5, 0.75),
   },
+  [theme.breakpoints.up("md")]: {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: 0,
+  },
 }));
 
 const LogoSection = styled(Box)(({ theme }) => ({
@@ -149,6 +155,7 @@ function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [playingVideoId, setPlayingVideoId] = useState<number | null>(null);
   const [focusedVideoId, setFocusedVideoId] = useState<number | null>(null);
+  const inFlightRequestRef = useRef(false);
 
   // Detect if we're on a large device (desktop/tablet)
   const isLargeDevice = useMediaQuery("(min-width:900px)");
@@ -162,9 +169,11 @@ function App() {
   // Function to load videos (either initial load or more videos)
   const loadVideos = useCallback(
     async (isInitialLoad: boolean = false, page: number = 1) => {
+      if (inFlightRequestRef.current && !isInitialLoad) return;
       if (loading && !isInitialLoad) return;
 
       try {
+        inFlightRequestRef.current = true;
         if (isInitialLoad) {
           setInitialLoading(true);
         } else {
@@ -190,8 +199,16 @@ function App() {
           // First page load - replace videos
           setVideos(response.videos);
         } else {
-          // Subsequent pages - append videos
-          setVideos((prev) => [...prev, ...response.videos]);
+          // Subsequent pages - append and dedupe by ID to prevent repeated cards
+          setVideos((prev) => {
+            const merged = [...prev, ...response.videos];
+            const seen = new Set<number>();
+            return merged.filter((video) => {
+              if (seen.has(video.id)) return false;
+              seen.add(video.id);
+              return true;
+            });
+          });
         }
 
         // Update current page
@@ -207,6 +224,7 @@ function App() {
         );
         setShowError(true);
       } finally {
+        inFlightRequestRef.current = false;
         if (isInitialLoad) {
           setInitialLoading(false);
         } else {
@@ -620,8 +638,9 @@ function App() {
               <Box
                 sx={{
                   display: "flex",
-                  height: "calc(100vh - 40px)",
+                  height: { xs: "calc(100vh - 40px)", md: "calc(100vh - 72px)" },
                   flexDirection: { xs: "column", md: "row" },
+                  mt: { xs: 0, md: "72px" },
                 }}
               >
                 {/* Desktop Sidebar */}

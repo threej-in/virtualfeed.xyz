@@ -1666,20 +1666,30 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                             />
                             <Button
                                 variant="outlined"
-                                startIcon={<RedditIcon />}
+                                startIcon={currentVideo.platform === 'youtube' ? <PlayIcon /> : <RedditIcon />}
                                 onClick={() => {
                                     try {
                                         // Handle both string and object metadata formats
                                         const metadata = typeof currentVideo.metadata === 'string' 
                                             ? JSON.parse(currentVideo.metadata) 
                                             : currentVideo.metadata;
-                                            
+
+                                        if (currentVideo.platform === 'youtube') {
+                                            const youtubeUrl =
+                                                metadata?.youtubeUrl ||
+                                                currentVideo.videoUrl;
+                                            if (youtubeUrl) {
+                                                window.open(youtubeUrl, '_blank');
+                                            }
+                                            return;
+                                        }
+
                                         // Open Reddit URL if available
                                         if (metadata?.redditUrl) {
                                             window.open(metadata.redditUrl, '_blank');
                                         }
                                     } catch (error) {
-                                        console.error('Error opening Reddit URL:', error);
+                                        console.error('Error opening source URL:', error);
                                     }
                                 }}
                                 sx={{ 
@@ -1691,7 +1701,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                 }}
                                 size="small"
                             >
-                                {window.innerWidth < 500 ? 'Reddit' : 'View on Reddit'}
+                                {window.innerWidth < 500
+                                    ? (currentVideo.platform === 'youtube' ? 'YouTube' : 'Reddit')
+                                    : (currentVideo.platform === 'youtube' ? 'View on YouTube' : 'View on Reddit')}
                             </Button>
                             
 

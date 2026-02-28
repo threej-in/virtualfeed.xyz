@@ -102,6 +102,7 @@ interface YouTubeVideoItem {
 }
 
 export class YouTubeApiService {
+  private static readonly MIN_LIKE_COUNT = Number(process.env.YOUTUBE_MIN_LIKE_COUNT || 10);
   static async scrapeYouTubeVideos(maxPages?: number, searchTermLimit?: number): Promise<number> {
     try {
       // Check if YouTube API is configured
@@ -306,6 +307,11 @@ export class YouTubeApiService {
 
       // Parse duration
       const duration = this.parseDuration(videoDetails.contentDetails.duration);
+      const likeCount = parseInt(videoDetails.statistics.likeCount) || 0;
+      if (likeCount < this.MIN_LIKE_COUNT) {
+        logger.info(`Skipping video with likes below ${this.MIN_LIKE_COUNT}: ${video.snippet.title} (${likeCount})`);
+        return false;
+      }
 
       // Create video data
       const videoData = {
@@ -317,7 +323,7 @@ export class YouTubeApiService {
         subreddit: 'youtube',
         tags,
         nsfw: false,
-        likes: parseInt(videoDetails.statistics.likeCount) || 0,
+        likes: likeCount,
         platform: 'youtube',
         metadata: {
           platform: 'youtube',
@@ -464,6 +470,13 @@ export class YouTubeApiService {
 
       // Parse duration
       const duration = this.parseDuration(videoDetails.contentDetails.duration);
+      const likeCount = parseInt(videoDetails.statistics.likeCount) || 0;
+      if (likeCount < this.MIN_LIKE_COUNT) {
+        return {
+          success: false,
+          error: `Video has only ${likeCount} likes (minimum required: ${this.MIN_LIKE_COUNT})`
+        };
+      }
 
       const videoData = {
         title: videoDetails.snippet.title,
@@ -474,7 +487,7 @@ export class YouTubeApiService {
         subreddit: 'youtube',
         tags,
         nsfw: false,
-        likes: parseInt(videoDetails.statistics.likeCount) || 0,
+        likes: likeCount,
         platform: 'youtube',
         metadata: {
           platform: 'youtube',

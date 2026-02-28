@@ -21,7 +21,7 @@ import {
 } from '@mui/material';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import TrendingButton from '../TrendingButton/TrendingButton';
-import { LanguageDetector, SUPPORTED_LANGUAGES } from '../../utils/languageDetection';
+import { SUPPORTED_LANGUAGES } from '../../utils/languageDetection';
 
 const StyledFormControl = styled(FormControl)(({ theme }) => ({
   background: 'rgba(19, 19, 47, 0.6)',
@@ -127,7 +127,7 @@ const Filters: React.FC<FiltersProps> = ({
   order,
   showNsfw,
   trending,
-  language = 'english',
+  language = 'all',
   onSortByChange,
   onOrderChange,
   onNsfwChange,
@@ -285,6 +285,7 @@ const Filters: React.FC<FiltersProps> = ({
               },
             }}
           >
+            <MenuItem value="all">ANY</MenuItem>
             {SUPPORTED_LANGUAGES.map((lang) => (
               <MenuItem key={lang.code} value={lang.code}>
                 {lang.flag} {lang.name}

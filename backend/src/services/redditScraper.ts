@@ -158,17 +158,10 @@ export class RedditScraper {
                     if (match && match[1]) videoId = match[1];
                 }
                 
-                // Use the fallback_url as the primary source
-                if (videoData.fallback_url) {
-                    // Store the original fallback URL
+                // Only ingest directly playable MP4 source for Reddit.
+                // dash_url/hls_url are manifest URLs and frequently fail in plain <video>.
+                if (videoData.fallback_url && /\/DASH_\d+\.mp4/i.test(videoData.fallback_url)) {
                     videoUrl = videoData.fallback_url;
-                    
-                    // Store the video ID for thumbnail generation
-                    // We'll use a local variable instead of adding to the post object to avoid TypeScript errors
-                } else if (videoData.dash_url) {
-                    videoUrl = videoData.dash_url;
-                } else if (videoData.hls_url) {
-                    videoUrl = videoData.hls_url;
                 }
             } 
             // Check for direct video links
@@ -218,6 +211,11 @@ export class RedditScraper {
                 if (!thumbnailUrl) {
                     thumbnailUrl = await VideoProcessor.generateThumbnail(videoMetadata.url);
                 }
+            }
+
+            // Skip rows with no usable thumbnail.
+            if (!thumbnailUrl || !(thumbnailUrl.startsWith('/thumbnails/') || /^https?:\/\//i.test(thumbnailUrl))) {
+                return false;
             }
 
             // Extract tags - create simple tags from title and subreddit if extractTags not available

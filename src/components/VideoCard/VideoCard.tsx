@@ -160,7 +160,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, isFocused = false
                     // Try to load the thumbnail from different sources
                     const apiBaseUrl = process.env.REACT_APP_API_BASE_URL || '';
                     
-                    // Only use thumbnails from our own server
+                    // Prefer local thumbnails, but allow absolute remote URLs (e.g. Reddit preview images).
                     if (video.thumbnailUrl && video.thumbnailUrl.startsWith('/thumbnails/')) {
                         // Make sure the thumbnail path has the .jpg extension
                         const thumbnailPath = video.thumbnailUrl.endsWith('.jpg') 
@@ -197,8 +197,22 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, isFocused = false
                         };
                         img.crossOrigin = 'anonymous';
                         img.src = thumbnailUrl;
+                    } else if (/^https?:\/\//i.test(video.thumbnailUrl)) {
+                        const remoteUrl = video.thumbnailUrl;
+                        const img = new Image();
+                        img.onload = () => {
+                            setThumbnailUrl(remoteUrl);
+                            setImageLoading(false);
+                        };
+                        img.onerror = () => {
+                            const fallbackThumbnail = createFallbackThumbnail(video.title);
+                            setThumbnailUrl(fallbackThumbnail);
+                            setImageLoading(false);
+                        };
+                        img.crossOrigin = 'anonymous';
+                        img.src = remoteUrl;
                     } else {
-                        // If no local thumbnail is available, use SVG fallback
+                        // If no valid thumbnail URL, use SVG fallback
                         const fallbackThumbnail = createFallbackThumbnail(video.title);
                         setThumbnailUrl(fallbackThumbnail);
                         setImageLoading(false);

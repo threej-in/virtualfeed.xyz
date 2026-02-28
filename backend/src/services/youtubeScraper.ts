@@ -304,6 +304,10 @@ export class YouTubeScraper {
 
       const viewCount = parseInt(videoDetails.statistics.viewCount) || 0;
       const likeCount = parseInt(videoDetails.statistics.likeCount) || 0;
+      if (likeCount < this.MIN_LIKE_COUNT) {
+        logger.info(`Skipping video with likes below ${this.MIN_LIKE_COUNT}: ${video.snippet.title} (${likeCount})`);
+        return false;
+      }
       if (this.isLowQualityVideo(video, viewCount, likeCount)) {
         logger.info(`Skipping low-quality YouTube video: ${video.snippet.title}`);
         return false;
@@ -568,24 +572,40 @@ export class YouTubeScraper {
         return { success: false, error: 'Video already exists in our collection' };
       }
 
-      // For manual submissions, we'll need to fetch video details
-      // This is a simplified version - you might want to use YouTube Data API for more details
+      const videoDetails = await this.getVideoDetails(videoId);
+      if (!videoDetails) {
+        return { success: false, error: 'Could not fetch video details from YouTube' };
+      }
+
+      const likeCount = parseInt(videoDetails.statistics.likeCount) || 0;
+      if (likeCount < this.MIN_LIKE_COUNT) {
+        return {
+          success: false,
+          error: `Video has only ${likeCount} likes (minimum required: ${this.MIN_LIKE_COUNT})`
+        };
+      }
+
+      // For manual submissions, create a light record after threshold checks.
       const videoData = {
-        title: `YouTube Video ${videoId}`, // Placeholder title
-        description: 'YouTube video submitted by user',
+        title: videoDetails.snippet.title || `YouTube Video ${videoId}`,
+        description: videoDetails.snippet.description || 'YouTube video submitted by user',
         videoUrl: youtubeUrl,
-        thumbnailUrl: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+        thumbnailUrl: videoDetails.snippet.thumbnails.maxres?.url ||
+          videoDetails.snippet.thumbnails.high?.url ||
+          videoDetails.snippet.thumbnails.medium?.url ||
+          videoDetails.snippet.thumbnails.default?.url ||
+          `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
         redditId: videoId,
         subreddit: 'youtube',
         tags: ['youtube', 'youtube-shorts', 'ai', 'user-submitted'],
         nsfw: false,
-        likes: 0,
+        likes: likeCount,
         platform: 'youtube',
         metadata: {
           platform: 'youtube',
           youtubeId: videoId,
           youtubeUrl: youtubeUrl,
-          publishedAt: new Date().toISOString(),
+          publishedAt: videoDetails.snippet.publishedAt || new Date().toISOString(),
           duration: 'short',
           width: 1080,
           height: 1920,
@@ -595,8 +615,8 @@ export class YouTubeScraper {
 
       const newVideo = await Video.create({
         ...videoData,
-        createdAt: new Date(),
-        views: 0,
+        createdAt: videoDetails.snippet.publishedAt ? new Date(videoDetails.snippet.publishedAt) : new Date(),
+        views: parseInt(videoDetails.statistics.viewCount) || 0,
         blacklisted: false
       });
 

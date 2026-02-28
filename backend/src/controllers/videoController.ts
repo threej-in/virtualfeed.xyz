@@ -85,6 +85,7 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
         const pageNum = Number(page);
         const limitNum = Number(limit);
         const offset = (pageNum - 1) * limitNum;
+        const excludeIdsForQuery = pageNum > 1 ? recentIds : [];
 
         const backfillAvailableVideos = async (
             currentVideos: any[],
@@ -126,7 +127,7 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
                         search: search as string,
                         showNsfw: showNsfw === 'true',
                         language: normalizedSelectedLanguage,
-                        excludeVideoIds: recentIds
+                        excludeVideoIds: excludeIdsForQuery
                     }
                 );
 
@@ -144,7 +145,7 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
                                 search: search as string,
                                 showNsfw: showNsfw === 'true',
                                 language: normalizedSelectedLanguage,
-                                excludeVideoIds: recentIds
+                                excludeVideoIds: excludeIdsForQuery
                             }
                         );
                         return nextPage.videos || [];
@@ -184,7 +185,7 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
                 search: search as string,
                 showNsfw: showNsfw === 'true',
                 language: targetLanguage,
-                excludeVideoIds: recentIds
+                excludeVideoIds: excludeIdsForQuery
             },
             sortBy as string,
             order as string
@@ -203,7 +204,7 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
                         search: search as string,
                         showNsfw: showNsfw === 'true',
                         language: targetLanguage,
-                        excludeVideoIds: recentIds
+                        excludeVideoIds: excludeIdsForQuery
                     },
                     sortBy as string,
                     order as string

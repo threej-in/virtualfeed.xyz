@@ -25,7 +25,6 @@ import VideoSubmission from "./components/VideoSubmission/VideoSubmission";
 import Background from "./components/Background/Background";
 import { Video } from "./types/Video";
 import { getVideos, submitVideo } from "./services/api";
-import { LanguageDetector } from "./utils/languageDetection";
 import { theme } from "./theme";
 
 const StyledContainer = styled(Container)(({ theme }) => ({
@@ -147,7 +146,7 @@ function App() {
     platform: "", // Default to show all platforms
     showNsfw: false,
     trending: undefined as "24h" | "48h" | "1w" | undefined, // No trending filter by default - show recent videos
-    language: LanguageDetector.getUserPreferredLanguage(), // Default to user's preferred language
+    language: "all",
   });
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [isFallbackContent, setIsFallbackContent] = useState(false);
@@ -156,6 +155,8 @@ function App() {
   const [playingVideoId, setPlayingVideoId] = useState<number | null>(null);
   const [focusedVideoId, setFocusedVideoId] = useState<number | null>(null);
   const inFlightRequestRef = useRef(false);
+  const hoverPlayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hoverCandidateVideoIdRef = useRef<number | null>(null);
 
   // Detect if we're on a large device (desktop/tablet)
   const isLargeDevice = useMediaQuery("(min-width:900px)");
@@ -465,6 +466,15 @@ function App() {
     }
   };
 
+  useEffect(() => {
+    return () => {
+      if (hoverPlayTimeoutRef.current) {
+        clearTimeout(hoverPlayTimeoutRef.current);
+        hoverPlayTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -538,7 +548,7 @@ function App() {
                     platform: "",
                     showNsfw: false,
                     trending: undefined,
-                    language: LanguageDetector.getUserPreferredLanguage(), // Use homepage algorithm by default
+                    language: "all",
                   });
                   // Reset videos array to trigger a fresh load
                   setVideos([]);
@@ -712,11 +722,30 @@ function App() {
                     isLargeDevice={isLargeDevice}
                     onDesktopVideoHoverStart={(videoId) => {
                       if (isLargeDevice) {
-                        setPlayingVideoId(videoId);
-                        setFocusedVideoId(videoId);
+                        hoverCandidateVideoIdRef.current = videoId;
+                        if (hoverPlayTimeoutRef.current) {
+                          clearTimeout(hoverPlayTimeoutRef.current);
+                        }
+
+                        hoverPlayTimeoutRef.current = setTimeout(() => {
+                          if (
+                            hoverCandidateVideoIdRef.current === videoId &&
+                            isLargeDevice
+                          ) {
+                            setPlayingVideoId(videoId);
+                            setFocusedVideoId(videoId);
+                          }
+                        }, 1200);
                       }
                     }}
                     onDesktopVideoHoverEnd={(videoId) => {
+                      if (hoverCandidateVideoIdRef.current === videoId) {
+                        hoverCandidateVideoIdRef.current = null;
+                      }
+                      if (hoverPlayTimeoutRef.current) {
+                        clearTimeout(hoverPlayTimeoutRef.current);
+                        hoverPlayTimeoutRef.current = null;
+                      }
                       if (isLargeDevice && playingVideoId === videoId) {
                         setPlayingVideoId(null);
                         setFocusedVideoId(null);
@@ -732,7 +761,7 @@ function App() {
                         platform: "", // Show all platforms by default
                         showNsfw: false,
                         trending: undefined, // Show recent videos by default
-                        language: LanguageDetector.getUserPreferredLanguage(), // Reset to user's preferred language
+                        language: "all",
                       });
                       // Reset videos array to trigger a fresh load
                       setVideos([]);

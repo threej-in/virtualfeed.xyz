@@ -27,7 +27,7 @@ const LANGUAGE_MAP: Record<string, string> = SUPPORTED_LANGUAGES.reduce((acc, la
   return acc;
 }, {} as Record<string, string>);
 
-const DEFAULT_LANGUAGE = 'en';
+const DEFAULT_LANGUAGE = 'all';
 const STORAGE_KEY = 'preferredLanguage';
 
 export class LanguageDetector {
@@ -35,11 +35,6 @@ export class LanguageDetector {
     const stored = LanguageDetector.getStoredLanguage();
     if (stored) {
       return stored;
-    }
-
-    const browserLanguage = LanguageDetector.detectBrowserLanguage();
-    if (browserLanguage) {
-      return browserLanguage;
     }
 
     return DEFAULT_LANGUAGE;
@@ -106,7 +101,12 @@ export class LanguageDetector {
       return null;
     }
 
-    const lookup = LANGUAGE_MAP[language.toLowerCase()];
+    const normalized = language.toLowerCase();
+    if (normalized === 'all' || normalized === 'any') {
+      return 'all';
+    }
+
+    const lookup = LANGUAGE_MAP[normalized];
     return lookup || null;
   }
 }

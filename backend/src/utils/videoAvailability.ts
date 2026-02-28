@@ -7,6 +7,7 @@ type CacheEntry = {
 
 const availabilityCache = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 
 const YOUTUBE_ID_REGEX =
   /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/;
@@ -35,6 +36,31 @@ async function isYouTubeVideoAvailable(youtubeId: string): Promise<boolean> {
   }
 
   try {
+    // Prefer YouTube Data API when available to ensure the video is embeddable.
+    if (YOUTUBE_API_KEY) {
+      const apiResponse = await axios.get('https://www.googleapis.com/youtube/v3/videos', {
+        params: {
+          part: 'status',
+          id: youtubeId,
+          key: YOUTUBE_API_KEY,
+        },
+        timeout: 5000,
+      });
+
+      const item = apiResponse.data?.items?.[0];
+      const status = item?.status;
+      const isEmbeddable = status?.embeddable === true;
+      const privacyStatus = status?.privacyStatus;
+      const uploadStatus = status?.uploadStatus;
+      const isPublicOrUnlisted = privacyStatus === 'public' || privacyStatus === 'unlisted';
+      const isUploadActive = uploadStatus === 'processed' || uploadStatus === 'uploaded';
+
+      const available = Boolean(item && isEmbeddable && isPublicOrUnlisted && isUploadActive);
+      availabilityCache.set(youtubeId, { available, checkedAt: now });
+      return available;
+    }
+
+    // Fallback check if API key is missing.
     const watchUrl = `https://www.youtube.com/watch?v=${youtubeId}`;
     await axios.get('https://www.youtube.com/oembed', {
       params: { url: watchUrl, format: 'json' },

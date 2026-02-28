@@ -1003,7 +1003,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                     </Box>
                                 )}
                                 {/* Loading animation displayed while video is buffering */}
-                                {isBuffering && (
+                                {isBuffering && !isPlaying && (
                                     <Box
                                         sx={{
                                             position: 'absolute',
@@ -1016,7 +1016,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                             flexDirection: 'column',
                                             alignItems: 'center',
                                             justifyContent: 'center',
-                                            backgroundColor: 'rgba(0,0,0,0.7)',
+                                            backgroundColor: 'rgba(0,0,0,0.4)',
+                                            pointerEvents: 'none',
                                         }}
                                     >
                                         {/* Animated loading spinner */}
@@ -1035,7 +1036,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                 {currentVideo.platform === 'youtube' ? (
                                     // YouTube video - use iframe
                                     <>
-                                        {youtubeLoading && (
+                                        {youtubeLoading && !isPlaying && (
                                             <Box
                                                 sx={{
                                                     position: 'absolute',
@@ -1048,7 +1049,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                                     flexDirection: 'column',
                                                     alignItems: 'center',
                                                     justifyContent: 'center',
-                                                    backgroundColor: 'rgba(0,0,0,0.7)',
+                                                    backgroundColor: 'rgba(0,0,0,0.4)',
+                                                    pointerEvents: 'none',
                                                 }}
                                             >
                                                 <img
@@ -1300,16 +1302,14 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                         
                                         <IconButton
                                             onClick={(e) => { e.stopPropagation(); toggleMute(); }}
-                                            disabled={!hasAudioTrack}
                                             sx={{
                                                 color: isMuted ? 'white' : '#4caf50',
-                                                opacity: hasAudioTrack ? 1 : 0.4,
                                                 padding: { xs: '4px', sm: '8px' },
                                                 '& .MuiSvgIcon-root': {
                                                     fontSize: { xs: '1.25rem', sm: '1.5rem' }
                                                 }
                                             }}
-                                            title={hasAudioTrack ? (isMuted ? 'Unmute audio' : 'Mute audio') : 'Audio unavailable'}
+                                            title={isMuted ? 'Unmute audio' : 'Mute audio'}
                                         >
                                             {isMuted ? <VolumeOffIcon /> : <VolumeUpIcon />}
                                         </IconButton>

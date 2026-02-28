@@ -15,6 +15,7 @@ interface VideoMetadata {
 }
 
 export class VideoProcessor {
+    private static readonly REMOTE_FALLBACK_THUMBNAIL = 'https://via.placeholder.com/400x720/1a1a1a/ffffff?text=Video';
     static async validateVideo(url: string): Promise<VideoMetadata | null> {
         try {
             // Special handling for Reddit DASH/HLS videos
@@ -143,32 +144,10 @@ export class VideoProcessor {
                 return thumbnailUrl;
             }
             
-            // Handle Reddit videos specially with multiple URL formats
+            // Handle Reddit videos specially.
+            // Reddit often blocks direct ffmpeg fetches with 403; prefer a known fallback thumbnail.
             if (videoUrl.includes('v.redd.it')) {
-                // Extract the video ID from the URL
-                let videoId = '';
-                
-                // Try to extract video ID from different URL formats
-                if (videoUrl.includes('/DASH_')) {
-                    // Format: https://v.redd.it/{id}/DASH_1080.mp4
-                    const match = videoUrl.match(/v\.redd\.it\/([^/]+)\//i);
-                    if (match && match[1]) videoId = match[1];
-                } else {
-                    // Format: https://v.redd.it/{id}
-                    const match = videoUrl.match(/v\.redd\.it\/([^/?]+)/i);
-                    if (match && match[1]) videoId = match[1];
-                }
-                
-                if (videoId) {
-                    // Just use the original URL without trying multiple formats
-                    try {
-                        await this.generateThumbnailWithFFmpeg(videoUrl, thumbnailPath);
-                        return thumbnailUrl;
-                    } catch (error) {
-                        logger.error(`Failed to generate thumbnail for: ${videoUrl}`, error);
-                        return this.createDefaultThumbnail(thumbnailPath, thumbnailUrl);
-                    }
-                }
+                return this.createDefaultThumbnail(thumbnailPath, thumbnailUrl);
             }
             
             // For non-Reddit videos or if we couldn't extract a video ID
@@ -194,23 +173,7 @@ export class VideoProcessor {
                 fs.mkdirSync(thumbnailDir, { recursive: true });
             }
             
-            try {
-                // Try to copy a default thumbnail if it exists
-                const defaultThumbnailPath = path.join(process.cwd(), 'public', 'thumbnails', 'default.jpg');
-                
-                if (fs.existsSync(defaultThumbnailPath)) {
-                    // Copy the default thumbnail to our hash-based filename
-                    fs.copyFileSync(defaultThumbnailPath, thumbnailPath);
-                } else {
-                    // Create an empty file as a last resort
-                    fs.writeFileSync(thumbnailPath, '');
-                }
-            } catch (copyError) {
-                logger.error(`Error creating default thumbnail in error handler: ${copyError}`);
-            }
-            
-            // Always return the local thumbnail URL path
-            return thumbnailUrl;
+            return this.createDefaultThumbnail(thumbnailPath, thumbnailUrl);
         }
     }
 
@@ -275,16 +238,15 @@ export class VideoProcessor {
             if (fs.existsSync(defaultThumbnailPath)) {
                 // Copy the default thumbnail to our hash-based filename
                 fs.copyFileSync(defaultThumbnailPath, thumbnailPath);
+                return thumbnailUrl;
             } else {
-                // Create an empty file as a last resort
-                fs.writeFileSync(thumbnailPath, '');
+                // If no local default thumbnail exists, return a visible remote placeholder URL.
+                return this.REMOTE_FALLBACK_THUMBNAIL;
             }
         } catch (copyError) {
             logger.error(`Error creating default thumbnail: ${copyError}`);
+            return this.REMOTE_FALLBACK_THUMBNAIL;
         }
-        
-        // Always return the local thumbnail URL path
-        return thumbnailUrl;
     }
 
     static extractTags(title: string, subreddit: string): string[] {

@@ -202,26 +202,7 @@ export class RedditScraper {
                 
                 // Ensure thumbnailUrl is never undefined
                 if (!thumbnailUrl) {
-                    // Create a hash for the video URL to maintain consistency
-                    const hash = crypto.createHash('md5').update(videoMetadata.url).digest('hex');
-                    const thumbnailDir = path.join(process.cwd(), 'public', 'thumbnails');
-                    const thumbnailPath = path.join(thumbnailDir, `${hash}.jpg`);
-                    thumbnailUrl = `/thumbnails/${hash}.jpg`;
-                    
-                    // Ensure the thumbnails directory exists
-                    if (!fs.existsSync(thumbnailDir)) {
-                        fs.mkdirSync(thumbnailDir, { recursive: true });
-                    }
-                    
-                    // Create a default thumbnail
-                    const defaultThumbnailPath = path.join(process.cwd(), 'public', 'thumbnails', 'default.jpg');
-                    if (fs.existsSync(defaultThumbnailPath)) {
-                        // Copy the default thumbnail
-                        fs.copyFileSync(defaultThumbnailPath, thumbnailPath);
-                    } else {
-                        // Create an empty file as a last resort
-                        fs.writeFileSync(thumbnailPath, '');
-                    }
+                    thumbnailUrl = await VideoProcessor.generateThumbnail(videoMetadata.url);
                 }
             } else {
                 // For non-Reddit videos, use the standard method
@@ -231,8 +212,7 @@ export class RedditScraper {
                 
                 // Ensure thumbnailUrl is never undefined for non-Reddit videos too
                 if (!thumbnailUrl) {
-                    const hash = crypto.createHash('md5').update(videoMetadata.url).digest('hex');
-                    thumbnailUrl = `/thumbnails/${hash}.jpg`;
+                    thumbnailUrl = await VideoProcessor.generateThumbnail(videoMetadata.url);
                 }
             }
 

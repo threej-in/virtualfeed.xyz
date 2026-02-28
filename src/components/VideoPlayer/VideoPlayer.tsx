@@ -73,6 +73,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
     const youtubeIframeRef = useRef<HTMLIFrameElement>(null);
     const nextVideoPreloadRef = useRef<HTMLVideoElement>(null);
     const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const lastAudioSyncAtRef = useRef<number>(0);
     const loadStartTimeRef = useRef<number>(0);
     const [nextYouTubeEmbedUrl, setNextYouTubeEmbedUrl] = useState('');
     // const nextVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -238,14 +239,17 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
             return;
         }
 
+        const now = Date.now();
         const timeDifference = Math.abs(audioElement.currentTime - videoElement.currentTime);
+        const minSyncIntervalMs = 600;
 
-        if (!force && timeDifference <= 0.3) {
+        if (!force && (timeDifference <= 0.45 || now - lastAudioSyncAtRef.current < minSyncIntervalMs)) {
             return;
         }
 
         try {
             audioElement.currentTime = videoElement.currentTime;
+            lastAudioSyncAtRef.current = now;
         } catch (error) {
             console.error('Error syncing Reddit audio track:', error);
         }
@@ -382,6 +386,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         audioElement.crossOrigin = 'anonymous';
         audioElement.muted = isMuted;
         audioElement.loop = isLooping;
+        audioElement.playbackRate = videoRef.current?.playbackRate || 1;
 
         setHasAudioTrack(true);
         setIsAudioReady(false);
@@ -442,7 +447,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         };
 
         const handleTimeUpdate = () => {
-            syncMedia(false);
+            if (!videoElement.paused && !videoElement.seeking) {
+                syncMedia(false);
+            }
         };
 
         videoElement.addEventListener('play', handlePlay);

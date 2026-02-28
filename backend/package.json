@@ -12,6 +12,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "scrape": "ts-node --prefer-ts-exts src/scripts/scrape.ts",
     "lang:reindex": "ts-node --prefer-ts-exts src/scripts/reindexVideoLanguages.ts",
+    "reddit:thumbnails:cleanup": "ts-node --prefer-ts-exts src/scripts/cleanupRedditThumbnails.ts",
+    "reddit:thumbnails:cleanup:dry": "ts-node --prefer-ts-exts src/scripts/cleanupRedditThumbnails.ts --dry-run",
     "scrape:youtube": "ts-node --prefer-ts-exts scripts/scrape-youtube.ts",
     "test:youtube": "ts-node --prefer-ts-exts scripts/test-youtube-scraper.ts"
   },

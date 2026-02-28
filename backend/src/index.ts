@@ -70,6 +70,7 @@ async function startServer() {
     const startScraping = async () => {
       try {
         await RedditScraper.scrapeSubreddits();
+        await RedditScraper.refreshRecentMediaSources(Number(process.env.REDDIT_MEDIA_REFRESH_LIMIT || 200));
         await YouTubeScraper.scrapeYouTubeVideos();
       } catch (error) {
         logger.error('Error in scraping cycle:', error);
@@ -81,6 +82,14 @@ async function startServer() {
     if (enableScraping) {
       logger.info('Reddit scraping is enabled');
       setInterval(startScraping, 24 * 60 * 60 * 1000);
+      setInterval(
+        () => {
+          RedditScraper.refreshRecentMediaSources(Number(process.env.REDDIT_MEDIA_REFRESH_LIMIT || 200)).catch((error) =>
+            logger.error('Error in reddit media refresh cycle:', error)
+          );
+        },
+        6 * 60 * 60 * 1000
+      );
 
       setTimeout(() => {
         logger.info('Starting initial Reddit scrape');

@@ -20,48 +20,17 @@ export class VideoProcessor {
         try {
             // Special handling for Reddit DASH/HLS videos
             if (url.includes('v.redd.it')) {
-                // Extract the video ID for better handling
-                let videoId = '';
+                // Preserve Reddit-provided media URLs (including query params/tokens).
+                // Rewriting to synthetic DASH_* URLs can break access when tokens are required.
                 let directUrl = url;
                 let height = 720;
                 let width = 1280;
                 
-                // Extract video ID from different URL formats
                 if (url.includes('/DASH_')) {
-                    // Format: https://v.redd.it/{id}/DASH_1080.mp4
-                    const match = url.match(/v\.redd\.it\/([^/]+)\//i);
-                    if (match && match[1]) {
-                        videoId = match[1];
-                        // Extract resolution if available
-                        const resMatch = url.match(/DASH_(\d+)/i);
-                        if (resMatch && resMatch[1]) {
-                            height = parseInt(resMatch[1]);
-                            width = Math.round(height * 16 / 9);
-                        }
-                        // Keep the direct URL as is since it's already a playable format
-                    }
-                } 
-                else if (url.includes('DASHPlaylist.mpd') || url.includes('HLSPlaylist')) {
-                    // Format: https://v.redd.it/{id}/DASHPlaylist.mpd?...
-                    const match = url.match(/v\.redd\.it\/([^/]+)\//i);
-                    if (match && match[1]) {
-                        videoId = match[1];
-                        // Convert to direct MP4 URL for better compatibility
-                        directUrl = `https://v.redd.it/${videoId}/DASH_720.mp4`;
-                        height = 720;
-                        width = 1280;
-                    }
-                }
-                else {
-                    // Simple format: https://v.redd.it/{id}
-                    const parts = url.split('/');
-                    for (let i = 0; i < parts.length; i++) {
-                        if (parts[i] === 'v.redd.it' && i + 1 < parts.length) {
-                            videoId = parts[i + 1].split('?')[0]; // Remove any query parameters
-                            // Convert to direct MP4 URL
-                            directUrl = `https://v.redd.it/${videoId}/DASH_720.mp4`;
-                            break;
-                        }
+                    const resMatch = url.match(/DASH_(\d+)/i);
+                    if (resMatch && resMatch[1]) {
+                        height = parseInt(resMatch[1]);
+                        width = Math.round(height * 16 / 9);
                     }
                 }
                 

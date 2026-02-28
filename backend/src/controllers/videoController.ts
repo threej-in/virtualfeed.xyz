@@ -36,17 +36,18 @@ const buildRedditAudioCandidates = (url: string): string[] => {
     const candidates = [url];
     const match = url.match(/https?:\/\/v\.redd\.it\/([^/?]+)\//i);
     const videoId = match?.[1];
+    const querySuffix = url.includes('?') ? url.substring(url.indexOf('?')) : '';
 
     if (!videoId) {
         return candidates;
     }
 
     const variants = [
-        `https://v.redd.it/${videoId}/DASH_AUDIO_128.mp4`,
-        `https://v.redd.it/${videoId}/DASH_audio.mp4`,
-        `https://v.redd.it/${videoId}/DASH_AUDIO_64.mp4`,
-        `https://v.redd.it/${videoId}/audio`,
-        `https://v.redd.it/${videoId}/audio.mp4`
+        `https://v.redd.it/${videoId}/DASH_AUDIO_128.mp4${querySuffix}`,
+        `https://v.redd.it/${videoId}/DASH_audio.mp4${querySuffix}`,
+        `https://v.redd.it/${videoId}/DASH_AUDIO_64.mp4${querySuffix}`,
+        `https://v.redd.it/${videoId}/audio${querySuffix}`,
+        `https://v.redd.it/${videoId}/audio.mp4${querySuffix}`
     ];
 
     for (const variant of variants) {
@@ -81,15 +82,40 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
         );
         const recentIds = getRecentFeedIds(feedMemoryKey);
         const normalizedSelectedLanguage = LanguageDetector.normalizeVideoLanguageFilter(language as string | undefined);
+        const pageNum = Number(page);
+        const limitNum = Number(limit);
+        const offset = (pageNum - 1) * limitNum;
+
+        const backfillAvailableVideos = async (
+            currentVideos: any[],
+            total: number,
+            fetchByOffset: (nextOffset: number) => Promise<any[]>
+        ): Promise<any[]> => {
+            if (currentVideos.length > 0 || total <= 0) {
+                return currentVideos;
+            }
+
+            const maxAttempts = 5;
+            let attempts = 0;
+            let nextOffset = offset + limitNum;
+
+            while (attempts < maxAttempts && nextOffset < total) {
+                const candidateVideos = await fetchByOffset(nextOffset);
+                const availableCandidates = await filterAvailableVideos(candidateVideos);
+                if (availableCandidates.length > 0) {
+                    return availableCandidates;
+                }
+                attempts += 1;
+                nextOffset += limitNum;
+            }
+
+            return currentVideos;
+        };
 
         // Handle trending filter
         if (trending && typeof trending === 'string') {
             const trendingPeriod = TRENDING_PERIODS.find(p => p.label === trending);
             if (trendingPeriod) {
-                const pageNum = Number(page);
-                const limitNum = Number(limit);
-                const offset = (pageNum - 1) * limitNum;
-                
                 const result = await TrendingService.getTrendingVideos(
                     trendingPeriod,
                     limitNum,
@@ -104,7 +130,26 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
                     }
                 );
 
-                const availableVideos = await filterAvailableVideos(result.videos);
+                const availableVideos = await backfillAvailableVideos(
+                    await filterAvailableVideos(result.videos),
+                    result.total,
+                    async (nextOffset: number) => {
+                        const nextPage = await TrendingService.getTrendingVideos(
+                            trendingPeriod,
+                            limitNum,
+                            nextOffset,
+                            {
+                                subreddit: subreddit as string,
+                                platform: platform as string,
+                                search: search as string,
+                                showNsfw: showNsfw === 'true',
+                                language: normalizedSelectedLanguage,
+                                excludeVideoIds: recentIds
+                            }
+                        );
+                        return nextPage.videos || [];
+                    }
+                );
                 rememberFeedIds(feedMemoryKey, availableVideos.map((video: any) => video.id).filter(Boolean));
                 
                 res.json({
@@ -122,10 +167,6 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
         }
 
         // If no trending filter is applied, use the new homepage algorithm
-        const pageNum = Number(page);
-        const limitNum = Number(limit);
-        const offset = (pageNum - 1) * limitNum;
-        
         // Detect user's preferred language from Accept-Language header
         const acceptLanguage = req.headers['accept-language'] as string;
         const browserLanguage = LanguageDetector.getBrowserLanguage(acceptLanguage);
@@ -149,7 +190,27 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
             order as string
         );
 
-        const availableVideos = await filterAvailableVideos(result.videos);
+        const availableVideos = await backfillAvailableVideos(
+            await filterAvailableVideos(result.videos),
+            result.total,
+            async (nextOffset: number) => {
+                const nextPage = await TrendingService.getHomepageVideos(
+                    limitNum,
+                    nextOffset,
+                    {
+                        subreddit: subreddit as string,
+                        platform: platform as string,
+                        search: search as string,
+                        showNsfw: showNsfw === 'true',
+                        language: targetLanguage,
+                        excludeVideoIds: recentIds
+                    },
+                    sortBy as string,
+                    order as string
+                );
+                return nextPage.videos || [];
+            }
+        );
         rememberFeedIds(feedMemoryKey, availableVideos.map((video: any) => video.id).filter(Boolean));
         
         res.json({

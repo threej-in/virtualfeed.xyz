@@ -69,9 +69,18 @@ async function isYouTubeVideoAvailable(youtubeId: string): Promise<boolean> {
 
     availabilityCache.set(youtubeId, { available: true, checkedAt: now });
     return true;
-  } catch {
-    availabilityCache.set(youtubeId, { available: false, checkedAt: now });
-    return false;
+  } catch (error: any) {
+    const status = Number(error?.response?.status || 0);
+
+    // Definitive unavailability signals from YouTube/oEmbed.
+    if ([401, 403, 404].includes(status)) {
+      availabilityCache.set(youtubeId, { available: false, checkedAt: now });
+      return false;
+    }
+
+    // Network/transient failures should not blank the feed.
+    availabilityCache.set(youtubeId, { available: true, checkedAt: now });
+    return true;
   }
 }
 

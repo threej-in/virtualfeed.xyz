@@ -260,6 +260,15 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, isFocused = false
         }
     };
 
+    const handleOpenRedditPost = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        const metadata: any = video.metadata && typeof video.metadata === 'object' ? video.metadata : {};
+        const redditUrl = metadata?.redditUrl;
+        if (typeof redditUrl === 'string' && redditUrl.trim()) {
+            window.open(redditUrl, '_blank', 'noopener,noreferrer');
+        }
+    };
+
     return (
         <StyledCard ref={cardRef} title={video.id + ""}>
             <CardActionArea
@@ -459,10 +468,14 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, isFocused = false
                         }} />
                         <Typography 
                             variant="caption" 
+                            onClick={handleOpenRedditPost}
                             sx={{ 
                                 fontSize: { xs: '0.7rem', sm: '0.75rem' },
                                 color: 'white',
-                                fontWeight: 500
+                                fontWeight: 500,
+                                cursor: 'pointer',
+                                textDecoration: 'underline',
+                                textUnderlineOffset: '2px'
                             }}
                         >
                             r/{video.subreddit}

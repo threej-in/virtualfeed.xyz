@@ -4,11 +4,17 @@ import { VideoProcessor } from './videoProcessor';
 import { logger } from './logger';
 import Video from '../models/Video';
 import { Submission, Listing } from 'snoowrap';
-import * as path from 'path';
-import * as fs from 'fs';
-import * as crypto from 'crypto';
 
 export class RedditScraper {
+    private static readonly RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
+    private static readonly DEFAULT_SEARCH_TERMS = [
+        'ai video',
+        'generated video',
+        'stable diffusion video',
+        'midjourney video',
+        'sora video'
+    ];
+
     private static getRedditPreviewThumbnail(post: Submission): string | null {
         const previewUrl = (post as any)?.preview?.images?.[0]?.source?.url;
         if (typeof previewUrl === 'string' && previewUrl.startsWith('http')) {
@@ -22,6 +28,28 @@ export class RedditScraper {
         }
 
         return null;
+    }
+
+    private static async fetchWithRetry<T>(label: string, fn: () => Promise<T>, maxAttempts: number = 3): Promise<T> {
+        let lastError: any = null;
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                return await fn();
+            } catch (error: any) {
+                lastError = error;
+                const statusCode = Number(error?.statusCode || error?.response?.status || 0);
+                const shouldRetry = this.RETRYABLE_STATUS_CODES.has(statusCode);
+                if (!shouldRetry || attempt === maxAttempts) {
+                    throw error;
+                }
+
+                const waitMs = Math.min(15000, 1000 * Math.pow(2, attempt));
+                logger.warn(`Reddit API ${label} failed with status ${statusCode}. Retrying in ${waitMs}ms (attempt ${attempt}/${maxAttempts})`);
+                await this.delay(waitMs);
+            }
+        }
+
+        throw lastError;
     }
 
     private static async processPost(post: Submission, subredditConfig: SubredditConfig, isManualSubmission: boolean = false): Promise<boolean> {
@@ -171,33 +199,9 @@ export class RedditScraper {
             }
 
             if (videoMetadata.url.includes('v.redd.it') && videoId) {
-                // For Reddit videos, use the video ID to create multiple URL formats to try
-                const urlFormats = [
-                    videoMetadata.url, // Original URL
-                    `https://v.redd.it/${videoId}/DASH_720.mp4`, // Standard format
-                    `https://v.redd.it/${videoId}/DASH_480.mp4`, // Lower quality
-                    `https://v.redd.it/${videoId}/DASH_360.mp4`, // Even lower quality
-                    `https://v.redd.it/${videoId}/DASH_96.mp4`  // Lowest quality
-                ];
-                
-                // Only attempt ffmpeg thumbnail generation if we do not already have a usable preview thumbnail.
+                // Only attempt thumbnail generation if we do not already have a usable preview thumbnail.
                 if (!thumbnailUrl) {
-                    let thumbnailGenerated = false;
-                    for (const url of urlFormats) {
-                        try {
-                            thumbnailUrl = await VideoProcessor.generateThumbnail(url);
-                            thumbnailGenerated = true;
-                            break;
-                        } catch (thumbnailError) {
-                            logger.debug(`Failed to generate thumbnail with URL: ${url}`);
-                            // Continue to next format
-                        }
-                    }
-
-                    if (!thumbnailGenerated) {
-                        // If all formats failed, try the default method
-                        thumbnailUrl = await VideoProcessor.generateThumbnail(videoMetadata.url);
-                    }
+                    thumbnailUrl = await VideoProcessor.generateThumbnail(videoMetadata.url);
                 }
                 
                 // Ensure thumbnailUrl is never undefined
@@ -244,15 +248,33 @@ export class RedditScraper {
             
             // For Reddit videos, try to extract audio URL
             let audioUrl = '';
+            let redditVideoSources: { fallbackUrl?: string; dashUrl?: string; hlsUrl?: string } | undefined;
             if (videoMetadata.url.includes('v.redd.it')) {
+                const redditVideo = (post.media as any)?.reddit_video;
+                const fallbackUrl = redditVideo?.fallback_url as string | undefined;
+                const dashUrl = redditVideo?.dash_url as string | undefined;
+                const hlsUrl = redditVideo?.hls_url as string | undefined;
+
+                if (fallbackUrl || dashUrl || hlsUrl) {
+                    redditVideoSources = {
+                        fallbackUrl,
+                        dashUrl,
+                        hlsUrl
+                    };
+                }
+
+                const querySuffix = fallbackUrl && fallbackUrl.includes('?')
+                    ? fallbackUrl.substring(fallbackUrl.indexOf('?'))
+                    : '';
+
                 if (videoId) {
-                    audioUrl = `https://v.redd.it/${videoId}/DASH_audio.mp4`;
+                    audioUrl = `https://v.redd.it/${videoId}/DASH_AUDIO_128.mp4${querySuffix}`;
                 } else {
                     const match = videoMetadata.url.match(/v\.redd\.it\/([^/?]+)/i);
                     if (match && match[1]) videoId = match[1];
                     
                     if (videoId) {
-                        audioUrl = `https://v.redd.it/${videoId}/DASH_audio.mp4`;
+                        audioUrl = `https://v.redd.it/${videoId}/DASH_AUDIO_128.mp4${querySuffix}`;
                     }
                 }
             }
@@ -278,6 +300,7 @@ export class RedditScraper {
                     redditUrl: `https://reddit.com${post.permalink}`,
                     upvotes: post.score, // Store upvotes in metadata too for backward compatibility
                     audioUrl, // Store the audio URL in metadata
+                    redditVideoSources,
                     author: post.author ? post.author.name : null // Store author name for duplicate detection
                 }
             };
@@ -330,61 +353,107 @@ export class RedditScraper {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
-    private static async getSubredditPosts(subredditName: string): Promise<Submission[]> {
+    private static getSearchTermsForSubreddit(subredditConfig: SubredditConfig): string[] {
+        const envTerms = process.env.REDDIT_SEARCH_TERMS
+            ?.split(',')
+            .map(term => term.trim())
+            .filter(Boolean) || [];
+        const configTerms = (subredditConfig.searchTerms || []).map(term => term.trim()).filter(Boolean);
+
+        if (configTerms.length > 0) {
+            return configTerms;
+        }
+
+        if (envTerms.length > 0) {
+            return envTerms;
+        }
+
+        return this.DEFAULT_SEARCH_TERMS;
+    }
+
+    private static async getSubredditPosts(subredditConfig: SubredditConfig): Promise<Submission[]> {
+        const subredditName = subredditConfig.name;
         const posts: Submission[] = [];
         const seenIds = new Set<string>();
+        const searchTerms = this.getSearchTermsForSubreddit(subredditConfig);
         
         // Get existing redditIds from the database to avoid processing posts we already have
-        let existingRedditIds: string[] = [];
+        let existingRedditIds = new Set<string>();
         try {
             const existingVideos = await Video.findAll({
                 attributes: ['redditId'],
                 where: { subreddit: subredditName },
                 raw: true
             });
-            existingRedditIds = existingVideos.map((video: any) => video.redditId);
+            existingRedditIds = new Set(
+                existingVideos
+                    .map((video: any) => video.redditId)
+                    .filter((redditId: any) => typeof redditId === 'string' && redditId.length > 0)
+            );
         } catch (error) {
             logger.error(`Error fetching existing videos for subreddit ${subredditName}`, error);
             // Continue with empty array if there was an error
         }
+
+        const pushIfNew = (post: Submission) => {
+            if (!seenIds.has(post.id) && !existingRedditIds.has(post.id)) {
+                posts.push(post);
+                seenIds.add(post.id);
+            }
+        };
         
         try {
             // Check if subreddit exists and is accessible
             try {
-                // Get new posts first so fresh content is picked up quickly
-                const newPosts = await redditClient.getSubreddit(subredditName).getNew({ limit: 50 });
+                const subreddit = redditClient.getSubreddit(subredditName);
+
+                // Search-first ingestion for targeted matching posts.
+                for (const term of searchTerms) {
+                    const searchPosts = await this.fetchWithRetry(
+                        `r/${subredditName} search(${term})`,
+                        () => subreddit.search({
+                            query: term,
+                            sort: 'new',
+                            time: 'week',
+                            limit: 25,
+                            restrictSr: true
+                        } as any) as Promise<Listing<Submission>>
+                    );
+                    for (const post of searchPosts) {
+                        pushIfNew(post);
+                    }
+                    await this.delay(1200);
+                }
+
+                // Fallback listing endpoints to fill gaps.
+                const newPosts = await this.fetchWithRetry(
+                    `r/${subredditName} getNew`,
+                    () => subreddit.getNew({ limit: 30 })
+                );
                 for (const post of newPosts) {
-                    if (!seenIds.has(post.id) && !existingRedditIds.includes(post.id)) {
-                        posts.push(post);
-                        seenIds.add(post.id);
-                    }
+                    pushIfNew(post);
                 }
 
                 // Add delay between API calls to avoid rate limiting
-                await this.delay(2000); // 2 second delay
+                await this.delay(1200);
 
-                // Get hot posts with reduced limit (25 instead of 100)
-                const hotPosts = await redditClient.getSubreddit(subredditName).getHot({ limit: 25 });
+                const hotPosts = await this.fetchWithRetry(
+                    `r/${subredditName} getHot`,
+                    () => subreddit.getHot({ limit: 15 })
+                );
                 for (const post of hotPosts) {
-                    // Skip posts we've already seen in this batch or already have in the database
-                    if (!seenIds.has(post.id) && !existingRedditIds.includes(post.id)) {
-                        posts.push(post);
-                        seenIds.add(post.id);
-                    }
+                    pushIfNew(post);
                 }
 
                 // Add delay between API calls to avoid rate limiting
-                await this.delay(2000); // 2 second delay
+                await this.delay(1200);
 
-                // Get only top posts from one time period (week) instead of all four periods
-                // This significantly reduces the number of API calls
-                const topPosts = await redditClient.getSubreddit(subredditName).getTop({ time: 'week', limit: 25 });
+                const topPosts = await this.fetchWithRetry(
+                    `r/${subredditName} getTop(week)`,
+                    () => subreddit.getTop({ time: 'week', limit: 15 })
+                );
                 for (const post of topPosts) {
-                    // Skip posts we've already seen in this batch or already have in the database
-                    if (!seenIds.has(post.id) && !existingRedditIds.includes(post.id)) {
-                        posts.push(post);
-                        seenIds.add(post.id);
-                    }
+                    pushIfNew(post);
                 }
 
             } catch (subredditError: any) {
@@ -407,7 +476,7 @@ export class RedditScraper {
     private static async scrapeSubreddit(subredditConfig: SubredditConfig): Promise<number> {
         let processedCount = 0;
         try {
-            const posts = await this.getSubredditPosts(subredditConfig.name);
+            const posts = await this.getSubredditPosts(subredditConfig);
             
             for (const post of posts) {
                 try {
@@ -444,6 +513,93 @@ export class RedditScraper {
         logger.info('Reddit scraping completed.');
     }
 
+    static async refreshRecentMediaSources(limit: number = 200): Promise<number> {
+        logger.info(`Refreshing Reddit media sources for up to ${limit} videos...`);
+        const refreshedWindowMs = 6 * 60 * 60 * 1000; // 6h
+        let refreshedCount = 0;
+
+        const videos = await Video.findAll({
+            where: {
+                platform: 'reddit',
+                blacklisted: false
+            },
+            order: [['updatedAt', 'ASC']],
+            limit
+        });
+
+        for (const video of videos) {
+            try {
+                const metadata: any = typeof video.metadata === 'object' && video.metadata ? { ...(video.metadata as any) } : {};
+                const lastRefreshedAt = metadata?.mediaRefreshedAt ? new Date(metadata.mediaRefreshedAt).getTime() : 0;
+                if (lastRefreshedAt && Date.now() - lastRefreshedAt < refreshedWindowMs) {
+                    continue;
+                }
+
+                const post: any = await this.fetchWithRetry<any>(
+                    `refresh submission ${video.redditId}`,
+                    () => (redditClient.getSubmission(video.redditId) as any).fetch(),
+                    2
+                );
+
+                if (!post || (!post.is_video && !(post.media as any)?.reddit_video)) {
+                    await video.update({ blacklisted: true });
+                    continue;
+                }
+
+                const redditVideo = (post.media as any)?.reddit_video;
+                const fallbackUrl = redditVideo?.fallback_url as string | undefined;
+                const dashUrl = redditVideo?.dash_url as string | undefined;
+                const hlsUrl = redditVideo?.hls_url as string | undefined;
+                const refreshedVideoUrl = fallbackUrl || dashUrl || hlsUrl || video.videoUrl;
+
+                const querySuffix = refreshedVideoUrl.includes('?')
+                    ? refreshedVideoUrl.substring(refreshedVideoUrl.indexOf('?'))
+                    : '';
+
+                const match = refreshedVideoUrl.match(/v\.redd\.it\/([^/?]+)/i);
+                const refreshedAudioUrl = match?.[1]
+                    ? `https://v.redd.it/${match[1]}/DASH_AUDIO_128.mp4${querySuffix}`
+                    : metadata?.audioUrl || '';
+
+                const refreshedMetadata = {
+                    ...metadata,
+                    redditUrl: `https://reddit.com${post.permalink}`,
+                    redditScore: post.score,
+                    upvotes: post.score,
+                    audioUrl: refreshedAudioUrl,
+                    redditVideoSources: {
+                        fallbackUrl,
+                        dashUrl,
+                        hlsUrl
+                    },
+                    mediaRefreshedAt: new Date().toISOString()
+                };
+
+                await video.update({
+                    videoUrl: refreshedVideoUrl,
+                    likes: post.score,
+                    metadata: refreshedMetadata
+                });
+
+                refreshedCount++;
+                await this.delay(400);
+            } catch (error: any) {
+                const statusCode = Number(error?.statusCode || error?.response?.status || 0);
+                if (statusCode === 403 || statusCode === 404) {
+                    await video.update({ blacklisted: true });
+                    continue;
+                }
+                logger.warn(`Failed to refresh media sources for redditId=${video.redditId}`, {
+                    message: error?.message,
+                    statusCode
+                });
+            }
+        }
+
+        logger.info(`Reddit media refresh completed. Updated ${refreshedCount} videos`);
+        return refreshedCount;
+    }
+
     static async processSinglePost(redditUrl: string, isNsfw: boolean = false): Promise<{ success: boolean; video?: any; error?: string }> {
         try {
             // Extract subreddit name and post ID from URL
@@ -455,7 +611,10 @@ export class RedditScraper {
             const [, subredditName, postId] = urlMatch;
             
             // Get the post using Reddit API
-            const post = await (redditClient.getSubmission(postId) as any).fetch();
+            const post: any = await this.fetchWithRetry<any>(
+                `submission ${postId} fetch`,
+                () => (redditClient.getSubmission(postId) as any).fetch()
+            );
             
             // Create a mock subreddit config for processing
             const subredditConfig: SubredditConfig = {
@@ -480,7 +639,7 @@ export class RedditScraper {
             }
 
             // Process the post using existing logic
-            const processed = await RedditScraper.processPost(post, subredditConfig, true); // true = manual submission
+            const processed = await RedditScraper.processPost(post as Submission, subredditConfig, true); // true = manual submission
             
             if (processed) {
                 // Find the newly created video

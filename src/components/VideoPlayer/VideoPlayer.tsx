@@ -173,6 +173,19 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
 
     // Get video URL for Reddit videos with multiple formats
     const getVideoUrl = useCallback((url: string) => {
+        const metadata: any = currentVideo?.metadata && typeof currentVideo.metadata === 'object'
+            ? currentVideo.metadata
+            : {};
+        const sourceFallback = metadata?.redditVideoSources?.fallbackUrl;
+        const sourceDash = metadata?.redditVideoSources?.dashUrl;
+        const sourceHls = metadata?.redditVideoSources?.hlsUrl;
+
+        if (currentVideo?.platform === 'reddit') {
+            if (typeof sourceFallback === 'string' && sourceFallback.trim()) return sourceFallback;
+            if (typeof sourceDash === 'string' && sourceDash.trim()) return sourceDash;
+            if (typeof sourceHls === 'string' && sourceHls.trim()) return sourceHls;
+        }
+
         if (url) {
             // Handle Reddit video URLs
             if (url.includes('v.redd.it')) {
@@ -187,15 +200,14 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                 }
                 
                 if (videoId) {
-                    // For Reddit videos, we need to handle audio separately
-                    // Reddit stores audio and video separately
+                    const querySuffix = url.includes('?') ? url.substring(url.indexOf('?')) : '';
                     const quality = getVideoQuality(videoId);
-                    return `https://v.redd.it/${videoId}/DASH_${quality}.mp4?source=fallback`;
+                    return `https://v.redd.it/${videoId}/DASH_${quality}.mp4${querySuffix}`;
                 }
             }
         }
         return url;
-    }, [getVideoQuality]);
+    }, [currentVideo, getVideoQuality]);
     
 
         // Preload function is now disabled to reduce network usage
@@ -364,7 +376,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
             const match = currentVideo.videoUrl.match(/v\.redd\.it\/([^/?]+)/i);
             const videoId = match?.[1];
             if (videoId) {
-                rawAudioUrl = `https://v.redd.it/${videoId}/DASH_AUDIO_128.mp4`;
+                const querySuffix = currentVideo.videoUrl.includes('?')
+                    ? currentVideo.videoUrl.substring(currentVideo.videoUrl.indexOf('?'))
+                    : '';
+                rawAudioUrl = `https://v.redd.it/${videoId}/DASH_AUDIO_128.mp4${querySuffix}`;
             }
         }
 
@@ -1155,7 +1170,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                                 if (videoId && videoQuality !== '360') {
                                                     // Try 360p as a single fallback
                                                     setVideoQuality('360');
-                                                    videoRef.current.src = `https://v.redd.it/${videoId}/DASH_360.mp4`;
+                                                    const querySuffix = currentVideo.videoUrl.includes('?')
+                                                        ? currentVideo.videoUrl.substring(currentVideo.videoUrl.indexOf('?'))
+                                                        : '';
+                                                    videoRef.current.src = `https://v.redd.it/${videoId}/DASH_360.mp4${querySuffix}`;
                                                     videoRef.current.load();
                                                     videoRef.current.play().catch(err => {
                                                         console.error('Fallback quality also failed:', err);

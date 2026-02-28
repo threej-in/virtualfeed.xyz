@@ -12,6 +12,16 @@ dotenv.config();
 // Secret code for secure actions
 const SECURE_ACTION_SECRET = process.env.SECURE_ACTION_SECRET || 'default-secret-change-me';
 
+const getSingleParam = (value: string | string[] | undefined): string | null => {
+    if (typeof value === 'string' && value.trim()) {
+        return value;
+    }
+    if (Array.isArray(value) && typeof value[0] === 'string' && value[0].trim()) {
+        return value[0];
+    }
+    return null;
+};
+
 const REDDIT_REQUEST_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
     'Accept': '*/*',
@@ -236,8 +246,12 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
 
 export const updateVideoStats = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { id } = req.params;
+        const id = getSingleParam(req.params.id as string | string[] | undefined);
         const { type } = req.body;
+        if (!id) {
+            res.status(400).json({ message: 'Video ID is required' });
+            return;
+        }
 
         const video = await Video.findByPk(id);
         if (!video) {
@@ -261,8 +275,12 @@ export const updateVideoStats = async (req: Request, res: Response): Promise<voi
 
 export const recordVideoEngagement = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { id } = req.params;
+        const id = getSingleParam(req.params.id as string | string[] | undefined);
         const { action = 'like' } = req.body || {};
+        if (!id) {
+            res.status(400).json({ message: 'Video ID is required' });
+            return;
+        }
 
         if (action !== 'like') {
             res.status(400).json({ message: 'Unsupported engagement action' });
@@ -307,8 +325,12 @@ export const recordVideoEngagement = async (req: Request, res: Response): Promis
 
 export const updateUpvotes = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { id } = req.params;
+        const id = getSingleParam(req.params.id as string | string[] | undefined);
         const { upvotes } = req.body;
+        if (!id) {
+            res.status(400).json({ message: 'Video ID is required' });
+            return;
+        }
 
         if (typeof upvotes !== 'number') {
             res.status(400).json({ message: 'Upvotes must be a number' });
@@ -336,7 +358,11 @@ export const updateUpvotes = async (req: Request, res: Response): Promise<void> 
 
 export const fetchRedditUpvotes = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { id } = req.params;
+        const id = getSingleParam(req.params.id as string | string[] | undefined);
+        if (!id) {
+            res.status(400).json({ message: 'Video ID is required' });
+            return;
+        }
 
         const video = await Video.findByPk(id);
         if (!video) {
@@ -460,7 +486,7 @@ export const proxyRedditAudio = async (req: Request, res: Response): Promise<voi
  */
 export const secureVideoAction = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { id } = req.params;
+        const id = getSingleParam(req.params.id as string | string[] | undefined);
         const { action, secret } = req.query;
         
         // Validate required parameters

@@ -7,13 +7,23 @@ dotenv.config();
 // Secret code for secure actions
 const SECURE_ACTION_SECRET = process.env.SECURE_ACTION_SECRET || 'default-secret-change-me';
 
+const getSingleParam = (value: string | string[] | undefined): string | null => {
+    if (typeof value === 'string' && value.trim()) {
+        return value;
+    }
+    if (Array.isArray(value) && typeof value[0] === 'string' && value[0].trim()) {
+        return value[0];
+    }
+    return null;
+};
+
 /**
  * Blacklist a video
  * Requires a secret code for authentication
  */
 export const blacklistVideo = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { id } = req.params;
+        const id = getSingleParam(req.params.id as string | string[] | undefined);
         const { secret } = req.body;
         
         // Validate required parameters
@@ -77,7 +87,7 @@ export const blacklistVideo = async (req: Request, res: Response): Promise<void>
  */
 export const unblacklistVideo = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { id } = req.params;
+        const id = getSingleParam(req.params.id as string | string[] | undefined);
         const { secret } = req.body;
         
         // Validate required parameters

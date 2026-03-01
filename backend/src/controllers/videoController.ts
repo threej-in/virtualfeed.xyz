@@ -53,13 +53,13 @@ const isAllowedRedditMediaUrl = (rawUrl: string, allowedHosts: Set<string>): boo
 const getRedditQuerySuffix = (url: string): string => (url.includes('?') ? url.substring(url.indexOf('?')) : '');
 
 const buildRedditVideoCandidates = (url: string): string[] => {
-    const candidates = [url];
-    const match = url.match(/https?:\/\/v\.redd\.it\/([^/?]+)/i);
+    const normalizedUrl = url.replace(/&amp;/g, '&');
+    const match = normalizedUrl.match(/https?:\/\/v\.redd\.it\/([^/?]+)/i);
     const videoId = match?.[1];
-    const querySuffix = getRedditQuerySuffix(url);
+    const querySuffix = getRedditQuerySuffix(normalizedUrl);
 
     if (!videoId) {
-        return candidates;
+        return [normalizedUrl];
     }
 
     const variants = [
@@ -71,10 +71,17 @@ const buildRedditVideoCandidates = (url: string): string[] => {
         `https://v.redd.it/${videoId}/DASH_96.mp4${querySuffix}`
     ];
 
-    for (const variant of variants) {
-        if (!candidates.includes(variant)) {
-            candidates.push(variant);
-        }
+    const isMp4Source = /\.mp4(\?|$)/i.test(normalizedUrl);
+    const ordered = isMp4Source
+        ? [normalizedUrl, ...variants]
+        : [...variants, normalizedUrl];
+
+    const candidates: string[] = [];
+    const seen = new Set<string>();
+    for (const candidate of ordered) {
+        if (!candidate || seen.has(candidate)) continue;
+        seen.add(candidate);
+        candidates.push(candidate);
     }
 
     return candidates;

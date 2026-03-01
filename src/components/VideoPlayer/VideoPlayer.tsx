@@ -176,23 +176,54 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         const metadata: any = currentVideo?.metadata && typeof currentVideo.metadata === 'object'
             ? currentVideo.metadata
             : {};
+        const cleanup = (value: string) => value.replace(/&amp;/g, '&').trim();
+        const getVideoId = (value: string) => value.match(/v\.redd\.it\/([^/?]+)/i)?.[1] || '';
+        const getQuerySuffix = (value: string) => (value.includes('?') ? value.substring(value.indexOf('?')) : '');
+        const buildMp4Candidates = (videoId: string, querySuffix: string): string[] => {
+            if (!videoId) return [];
+            return [
+                `https://v.redd.it/${videoId}/DASH_1080.mp4${querySuffix}`,
+                `https://v.redd.it/${videoId}/DASH_720.mp4${querySuffix}`,
+                `https://v.redd.it/${videoId}/DASH_480.mp4${querySuffix}`,
+                `https://v.redd.it/${videoId}/DASH_360.mp4${querySuffix}`,
+                `https://v.redd.it/${videoId}/DASH_240.mp4${querySuffix}`,
+                `https://v.redd.it/${videoId}/DASH_96.mp4${querySuffix}`
+            ];
+        };
         const sourceFallback = typeof metadata?.redditVideoSources?.fallbackUrl === 'string'
-            ? metadata.redditVideoSources.fallbackUrl.replace(/&amp;/g, '&')
+            ? cleanup(metadata.redditVideoSources.fallbackUrl)
             : '';
         const sourceDash = typeof metadata?.redditVideoSources?.dashUrl === 'string'
-            ? metadata.redditVideoSources.dashUrl.replace(/&amp;/g, '&')
+            ? cleanup(metadata.redditVideoSources.dashUrl)
             : '';
         const sourceHls = typeof metadata?.redditVideoSources?.hlsUrl === 'string'
-            ? metadata.redditVideoSources.hlsUrl.replace(/&amp;/g, '&')
+            ? cleanup(metadata.redditVideoSources.hlsUrl)
             : '';
+        const sourceCandidates = Array.isArray(metadata?.redditVideoSources?.mp4Candidates)
+            ? metadata.redditVideoSources.mp4Candidates
+                .filter((candidate: any) => typeof candidate === 'string' && candidate.trim().length > 0)
+                .map((candidate: string) => cleanup(candidate))
+            : [];
 
         if (currentVideo?.platform === 'reddit') {
             if (typeof sourceFallback === 'string' && sourceFallback.trim()) return getRedditVideoProxyUrl(sourceFallback);
-            // <video> prefers direct mp4. Keep dash/hls as last-resort fallback values.
+
+            const firstCandidate = sourceCandidates[0];
+            if (firstCandidate) return getRedditVideoProxyUrl(firstCandidate);
+
+            const seed = sourceDash || sourceHls || (typeof url === 'string' ? cleanup(url) : '');
+            const seedId = getVideoId(seed);
+            const querySuffix = getQuerySuffix(seed);
+            const generatedCandidates = buildMp4Candidates(seedId, querySuffix);
+            if (generatedCandidates.length > 0) {
+                return getRedditVideoProxyUrl(generatedCandidates[0]);
+            }
+
+            // As a last resort keep current source.
             if (typeof sourceDash === 'string' && sourceDash.trim()) return getRedditVideoProxyUrl(sourceDash);
             if (typeof sourceHls === 'string' && sourceHls.trim()) return getRedditVideoProxyUrl(sourceHls);
         }
-        const cleaned = typeof url === 'string' ? url.replace(/&amp;/g, '&') : url;
+        const cleaned = typeof url === 'string' ? cleanup(url) : url;
         if (currentVideo?.platform === 'reddit' && typeof cleaned === 'string' && cleaned.includes('v.redd.it')) {
             return getRedditVideoProxyUrl(cleaned);
         }

@@ -4,26 +4,26 @@ export const theme = createTheme({
   palette: {
     mode: 'dark',
     primary: {
-      main: '#6C63FF',
-      light: '#8F89FF',
-      dark: '#4B45B3',
+      main: '#ff0000',
+      light: '#ff3d3d',
+      dark: '#cc0000',
     },
     secondary: {
-      main: '#FF6584',
-      light: '#FF89A1',
-      dark: '#B3475C',
+      main: '#3ea6ff',
+      light: '#6dbdff',
+      dark: '#1e88e5',
     },
     background: {
-      default: '#0A0A1F',
-      paper: '#13132F',
+      default: '#0f0f0f',
+      paper: '#212121',
     },
   },
   typography: {
-    fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
+    fontFamily: '"Roboto", "Arial", sans-serif',
     h1: {
       fontSize: '2.5rem',
       fontWeight: 700,
-      background: 'linear-gradient(45deg, #6C63FF 30%, #FF6584 90%)',
+      background: 'linear-gradient(45deg, #ffffff 30%, #d4d4d4 90%)',
       WebkitBackgroundClip: 'text',
       WebkitTextFillColor: 'transparent',
     },
@@ -40,13 +40,12 @@ export const theme = createTheme({
     MuiCard: {
       styleOverrides: {
         root: {
-          background: 'linear-gradient(135deg, rgba(19, 19, 47, 0.9) 0%, rgba(19, 19, 47, 0.6) 100%)',
-          backdropFilter: 'blur(10px)',
-          border: '1px solid rgba(108, 99, 255, 0.1)',
+          background: '#181818',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
           transition: 'all 0.3s ease-in-out',
           '&:hover': {
-            transform: 'translateY(-5px)',
-            boxShadow: '0 8px 30px rgba(108, 99, 255, 0.2)',
+            transform: 'translateY(-2px)',
+            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.35)',
           },
         },
       },

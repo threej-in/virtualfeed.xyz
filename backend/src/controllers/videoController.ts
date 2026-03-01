@@ -32,6 +32,103 @@ const REDDIT_REQUEST_HEADERS = {
     'Origin': 'https://www.reddit.com'
 };
 
+const REDDIT_MEDIA_HOSTS = new Set([
+    'v.redd.it',
+    'preview.redd.it',
+    'external-preview.redd.it',
+    'i.redd.it',
+    'i.reddituploads.com',
+    'b.thumbs.redditmedia.com'
+]);
+
+const isAllowedRedditMediaUrl = (rawUrl: string, allowedHosts: Set<string>): boolean => {
+    try {
+        const parsed = new URL(rawUrl);
+        return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && allowedHosts.has(parsed.hostname);
+    } catch {
+        return false;
+    }
+};
+
+const getRedditQuerySuffix = (url: string): string => (url.includes('?') ? url.substring(url.indexOf('?')) : '');
+
+const buildRedditVideoCandidates = (url: string): string[] => {
+    const candidates = [url];
+    const match = url.match(/https?:\/\/v\.redd\.it\/([^/?]+)/i);
+    const videoId = match?.[1];
+    const querySuffix = getRedditQuerySuffix(url);
+
+    if (!videoId) {
+        return candidates;
+    }
+
+    const variants = [
+        `https://v.redd.it/${videoId}/DASH_1080.mp4${querySuffix}`,
+        `https://v.redd.it/${videoId}/DASH_720.mp4${querySuffix}`,
+        `https://v.redd.it/${videoId}/DASH_480.mp4${querySuffix}`,
+        `https://v.redd.it/${videoId}/DASH_360.mp4${querySuffix}`,
+        `https://v.redd.it/${videoId}/DASH_240.mp4${querySuffix}`,
+        `https://v.redd.it/${videoId}/DASH_96.mp4${querySuffix}`
+    ];
+
+    for (const variant of variants) {
+        if (!candidates.includes(variant)) {
+            candidates.push(variant);
+        }
+    }
+
+    return candidates;
+};
+
+const streamRemoteWithCandidates = async (
+    req: Request,
+    res: Response,
+    candidates: string[],
+    contentTypeFallback: string
+): Promise<void> => {
+    const rangeHeader = typeof req.headers.range === 'string' ? req.headers.range : undefined;
+    let upstreamResponse: any = null;
+    let lastError: any = null;
+
+    for (const candidateUrl of candidates) {
+        try {
+            upstreamResponse = await axios({
+                method: 'get',
+                url: candidateUrl,
+                responseType: 'stream',
+                timeout: 15000,
+                validateStatus: (status) => status >= 200 && status < 400,
+                headers: {
+                    ...REDDIT_REQUEST_HEADERS,
+                    ...(rangeHeader ? { Range: rangeHeader } : {})
+                }
+            });
+            break;
+        } catch (error: any) {
+            lastError = error;
+        }
+    }
+
+    if (!upstreamResponse) {
+        throw lastError || new Error('Unable to stream media from upstream');
+    }
+
+    const statusCode = Number(upstreamResponse.status || 200);
+    res.status(statusCode);
+    res.setHeader('Content-Type', upstreamResponse.headers['content-type'] || contentTypeFallback);
+    if (upstreamResponse.headers['content-length']) {
+        res.setHeader('Content-Length', upstreamResponse.headers['content-length']);
+    }
+    if (upstreamResponse.headers['accept-ranges']) {
+        res.setHeader('Accept-Ranges', upstreamResponse.headers['accept-ranges']);
+    }
+    if (upstreamResponse.headers['content-range']) {
+        res.setHeader('Content-Range', upstreamResponse.headers['content-range']);
+    }
+
+    upstreamResponse.data.pipe(res);
+};
+
 const buildRedditAudioCandidates = (url: string): string[] => {
     const candidates = [url];
     const match = url.match(/https?:\/\/v\.redd\.it\/([^/?]+)\//i);
@@ -73,6 +170,9 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
             trending,
             language
         } = req.query;
+        const selectedPlatform = typeof platform === 'string' ? platform.toLowerCase().trim() : '';
+        const effectiveSortBy = selectedPlatform === 'youtube' ? 'views' : (sortBy as string);
+        const effectiveOrder = selectedPlatform === 'youtube' ? 'desc' : (order as string);
 
         const feedMemoryKey = buildFeedMemoryKey(
             req.headers['x-forwarded-for'] as string | undefined,
@@ -187,8 +287,8 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
                 language: targetLanguage,
                 excludeVideoIds: excludeIdsForQuery
             },
-            sortBy as string,
-            order as string
+            effectiveSortBy,
+            effectiveOrder
         );
 
         const availableVideos = await backfillAvailableVideos(
@@ -206,8 +306,8 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
                         language: targetLanguage,
                         excludeVideoIds: excludeIdsForQuery
                     },
-                    sortBy as string,
-                    order as string
+                    effectiveSortBy,
+                    effectiveOrder
                 );
                 return nextPage.videos || [];
             }
@@ -538,6 +638,74 @@ export const proxyRedditAudio = async (req: Request, res: Response): Promise<voi
         }
     } catch (error) {
         console.error('Error in proxyRedditAudio:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+};
+
+/**
+ * Proxy endpoint to stream Reddit video files with required headers.
+ * This reduces 403/hotlink failures from direct browser requests.
+ */
+export const proxyRedditVideo = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { url } = req.query;
+
+        if (!url || typeof url !== 'string') {
+            res.status(400).json({ error: 'URL parameter is required' });
+            return;
+        }
+
+        if (!isAllowedRedditMediaUrl(url, new Set(['v.redd.it']))) {
+            res.status(403).json({ error: 'Only v.redd.it video URLs are allowed' });
+            return;
+        }
+
+        try {
+            const candidates = buildRedditVideoCandidates(url);
+            await streamRemoteWithCandidates(req, res, candidates, 'video/mp4');
+        } catch (error: any) {
+            const status = Number(error?.response?.status || 500);
+            const errorMessage = error?.response?.statusText || error?.message || 'Unknown error';
+            res.status(status).json({
+                error: `Failed to proxy Reddit video: ${errorMessage}`,
+                status
+            });
+        }
+    } catch (error) {
+        console.error('Error in proxyRedditVideo:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+};
+
+/**
+ * Proxy endpoint for Reddit-hosted thumbnails/previews.
+ */
+export const proxyRedditThumbnail = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { url } = req.query;
+
+        if (!url || typeof url !== 'string') {
+            res.status(400).json({ error: 'URL parameter is required' });
+            return;
+        }
+
+        if (!isAllowedRedditMediaUrl(url, REDDIT_MEDIA_HOSTS)) {
+            res.status(403).json({ error: 'Only Reddit media image URLs are allowed' });
+            return;
+        }
+
+        try {
+            await streamRemoteWithCandidates(req, res, [url], 'image/jpeg');
+        } catch (error: any) {
+            const status = Number(error?.response?.status || 500);
+            const errorMessage = error?.response?.statusText || error?.message || 'Unknown error';
+            res.status(status).json({
+                error: `Failed to proxy Reddit thumbnail: ${errorMessage}`,
+                status
+            });
+        }
+    } catch (error) {
+        console.error('Error in proxyRedditThumbnail:', error);
         res.status(500).json({ error: 'Server error' });
     }
 };

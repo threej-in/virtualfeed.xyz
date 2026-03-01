@@ -25,8 +25,8 @@ interface SidebarProps {
 const StyledSidebar = styled(Box)(({ theme }) => ({
   width: 260,
   height: 'calc(100vh - 60px)', // Account for header height
-  background: 'linear-gradient(135deg, rgba(19, 19, 47, 0.95) 0%, rgba(25, 25, 60, 0.9) 100%)',
-  borderRight: '1px solid rgba(108, 99, 255, 0.2)',
+  background: '#0f0f0f',
+  borderRight: '1px solid rgba(255, 255, 255, 0.12)',
   backdropFilter: 'blur(25px)',
   padding: theme.spacing(3),
   display: 'flex',
@@ -46,10 +46,10 @@ const StyledSidebar = styled(Box)(({ theme }) => ({
     borderRadius: '4px',
   },
   '&::-webkit-scrollbar-thumb': {
-    background: 'rgba(108, 99, 255, 0.3)',
+    background: 'rgba(255, 255, 255, 0.22)',
     borderRadius: '4px',
     '&:hover': {
-      background: 'rgba(108, 99, 255, 0.5)',
+      background: 'rgba(255, 255, 255, 0.32)',
     },
   },
   // Mobile responsive styles - only apply when not in drawer
@@ -124,10 +124,10 @@ const PlatformButton = styled(Button, {
   height: 44,
   borderRadius: 12,
   background: $active 
-    ? 'linear-gradient(135deg, rgba(108, 99, 255, 0.2), rgba(255, 101, 132, 0.2))'
+    ? 'rgba(255, 0, 0, 0.16)'
     : 'rgba(255, 255, 255, 0.03)',
   border: $active 
-    ? '2px solid rgba(108, 99, 255, 0.4)'
+    ? '2px solid rgba(255, 0, 0, 0.42)'
     : '1px solid rgba(255, 255, 255, 0.1)',
   color: $active ? 'white' : 'rgba(255, 255, 255, 0.7)',
   textTransform: 'none',
@@ -139,12 +139,12 @@ const PlatformButton = styled(Button, {
   backdropFilter: 'blur(10px)',
   '&:hover': {
     background: $active 
-      ? 'linear-gradient(135deg, rgba(108, 99, 255, 0.25), rgba(255, 101, 132, 0.25))'
+      ? 'rgba(255, 0, 0, 0.2)'
       : 'rgba(255, 255, 255, 0.08)',
-    borderColor: $active ? 'rgba(108, 99, 255, 0.5)' : 'rgba(255, 255, 255, 0.2)',
+    borderColor: $active ? 'rgba(255, 0, 0, 0.5)' : 'rgba(255, 255, 255, 0.2)',
     transform: 'translateY(-2px)',
     boxShadow: $active 
-      ? '0 8px 25px rgba(108, 99, 255, 0.3)'
+      ? '0 8px 25px rgba(255, 0, 0, 0.2)'
       : '0 4px 15px rgba(0, 0, 0, 0.2)',
   },
   '&::before': $active ? {
@@ -154,7 +154,7 @@ const PlatformButton = styled(Button, {
     left: 0,
     right: 0,
     bottom: 0,
-    background: 'linear-gradient(135deg, rgba(108, 99, 255, 0.1), rgba(255, 101, 132, 0.1))',
+    background: 'rgba(255, 0, 0, 0.08)',
     borderRadius: 12,
     zIndex: -1,
   } : {},
@@ -178,7 +178,7 @@ const SubmitButton = styled(Button)(({ theme }) => ({
   width: '100%',
   height: 44,
   borderRadius: 12,
-  background: 'linear-gradient(135deg, #6c63ff, #ff6584)',
+  background: 'linear-gradient(135deg, #cc0000, #ff0000)',
   color: 'white',
   textTransform: 'none',
   fontWeight: 700,
@@ -188,9 +188,9 @@ const SubmitButton = styled(Button)(({ theme }) => ({
   overflow: 'hidden',
   backdropFilter: 'blur(10px)',
   '&:hover': {
-    background: 'linear-gradient(135deg, #5a52ff, #ff4d6a)',
+    background: 'linear-gradient(135deg, #b30000, #e60000)',
     transform: 'translateY(-2px)',
-    boxShadow: '0 8px 25px rgba(108, 99, 255, 0.4)',
+    boxShadow: '0 8px 25px rgba(255, 0, 0, 0.35)',
   },
   '&::before': {
     content: '""',

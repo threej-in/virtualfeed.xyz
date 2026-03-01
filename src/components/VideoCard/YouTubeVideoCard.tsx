@@ -127,19 +127,18 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
-          backgroundColor: 'rgba(255, 255, 255, 0.05)',
-          backdropFilter: 'blur(10px)',
-          border: '1px solid rgba(255, 255, 255, 0.1)',
+          backgroundColor: '#181818',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
           transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
           '&:hover': {
-            transform: 'translateY(-4px)',
-            boxShadow: '0 8px 25px rgba(0, 0, 0, 0.3)',
+            transform: 'translateY(-2px)',
+            boxShadow: '0 10px 20px rgba(0, 0, 0, 0.35)',
           },
         }}
       >
         <Box sx={{ 
           position: 'relative', 
-          paddingTop: '177.78%',
+          paddingTop: { xs: '177.78%', md: '56.25%' },
           // Ensure consistent dimensions
           width: '100%',
           height: 0,
@@ -160,7 +159,7 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
               left: 0,
               backgroundColor: 'rgba(255, 255, 255, 0.1)',
               // Ensure skeleton maintains same aspect ratio
-              aspectRatio: '9/16',
+              aspectRatio: { xs: '9 / 16', md: '16 / 9' },
               minHeight: '100%',
               minWidth: '100%',
             }}
@@ -184,20 +183,21 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
       whileHover={{ scale: 1.02 }}
+      style={{ width: '100%', height: '100%' }}
     >
       <Card
         sx={{
+          width: '100%',
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
-          backgroundColor: 'rgba(255, 255, 255, 0.05)',
-          backdropFilter: 'blur(10px)',
-          border: '1px solid rgba(255, 255, 255, 0.1)',
+          backgroundColor: '#181818',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
           transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
           cursor: 'pointer',
           '&:hover': {
-            transform: 'translateY(-4px)',
-            boxShadow: '0 8px 25px rgba(0, 0, 0, 0.3)',
+            transform: 'translateY(-2px)',
+            boxShadow: '0 10px 20px rgba(0, 0, 0, 0.35)',
           },
           // Mobile TikTok-like styling
           '@media (max-width: 600px)': {
@@ -220,7 +220,7 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
       >
         <Box sx={{ 
           position: 'relative', 
-          paddingTop: '177.78%',
+          paddingTop: { xs: '177.78%', md: '56.25%' },
           // Ensure consistent dimensions
           width: '100%',
           height: 0,
@@ -242,7 +242,7 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
                 left: 0,
                 backgroundColor: 'rgba(255, 255, 255, 0.1)',
                 // Ensure skeleton maintains same aspect ratio
-                aspectRatio: '9/16',
+                aspectRatio: { xs: '9 / 16', md: '16 / 9' },
                 minHeight: '100%',
                 minWidth: '100%',
               }}
@@ -273,7 +273,7 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
                     display: imageLoaded ? 'block' : 'none',
                     minHeight: '100%',
                     minWidth: '100%',
-                    aspectRatio: '9/16',
+                    aspectRatio: { xs: '9 / 16', md: '16 / 9' },
                     '& img': {
                       objectFit: 'cover',
                       objectPosition: 'center',
@@ -351,7 +351,7 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
                 minHeight: '100%',
                 minWidth: '100%',
                 // Force aspect ratio consistency
-                aspectRatio: '9/16',
+                aspectRatio: { xs: '9 / 16', md: '16 / 9' },
                 // Prevent image distortion
                 '& img': {
                   objectFit: 'cover',
@@ -419,102 +419,52 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
             />
           )}
 
-          {/* Stats overlay */}
-          <Box
-            sx={{
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              background: 'linear-gradient(transparent, rgba(0, 0, 0, 0.7))',
-              padding: '8px',
-              borderRadius: '4px',
-            }}
-          >
-            {/* Views and Likes */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                <ViewIcon sx={{ 
-                  fontSize: 14, 
-                  color: 'white',
-                  mr: 0.5,
-                  opacity: 0.9
-                }} />
-                <Typography 
-                  variant="caption" 
-                  sx={{ 
-                    fontSize: '0.7rem',
-                    color: 'white',
-                    fontWeight: 500
-                  }}
-                >
-                  {formatNumber(video.views)}
-                </Typography>
-              </Box>
-              
-              <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                <LikeIcon sx={{ 
-                  fontSize: 14, 
-                  color: 'white',
-                  mr: 0.5,
-                  opacity: 0.9
-                }} />
-                <Typography 
-                  variant="caption" 
-                  sx={{ 
-                    fontSize: '0.7rem',
-                    color: 'white',
-                    fontWeight: 500
-                  }}
-                >
-                  {formatNumber(video.likes)}
-                </Typography>
-              </Box>
-            </Box>
-            
-            {/* Platform indicator */}
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <YouTubeIcon sx={{ 
-                fontSize: 14, 
-                color: '#FF0000',
-                mr: 0.5,
-                opacity: 0.9
-              }} />
-              <Typography 
-                variant="caption" 
-                sx={{ 
-                  fontSize: '0.7rem',
-                  color: 'white',
-                  fontWeight: 500
-                }}
-              >
-                YouTube
-              </Typography>
-            </Box>
-          </Box>
         </Box>
 
         <CardContent sx={{ 
-          flexGrow: 1, 
-          p: 1, 
-          '&:last-child': { pb: 1 },
+          flexGrow: 1,
+          p: 1.25,
+          '&:last-child': { pb: 1.25 },
           // Mobile: hide content area for TikTok-like experience
           '@media (max-width: 600px)': {
             display: 'none',
           }
         }}>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              mb: 0.6,
+              color: 'rgba(255, 255, 255, 0.78)',
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
+              <ViewIcon sx={{ fontSize: 14 }} />
+              <Typography variant="caption" sx={{ fontSize: '0.75rem' }}>
+                {formatNumber(video.views || 0)}
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
+              <LikeIcon sx={{ fontSize: 14 }} />
+              <Typography variant="caption" sx={{ fontSize: '0.75rem' }}>
+                {formatNumber(video.likes || 0)}
+              </Typography>
+            </Box>
+          </Box>
+
           <Typography
             variant="body2"
             sx={{
-              color: 'rgba(255, 255, 255, 0.7)',
-              fontSize: '0.875rem',
+              color: 'rgba(255, 255, 255, 0.92)',
+              fontSize: '0.92rem',
+              fontWeight: 600,
+              lineHeight: 1.35,
               display: '-webkit-box',
               WebkitLineClamp: 2,
               WebkitBoxOrient: 'vertical',
               overflow: 'hidden',
+              mb: 0.6,
             }}
           >
             {truncateTitle(video.title)}

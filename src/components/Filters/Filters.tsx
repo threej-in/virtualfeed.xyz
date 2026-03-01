@@ -24,7 +24,7 @@ import TrendingButton from '../TrendingButton/TrendingButton';
 import { SUPPORTED_LANGUAGES } from '../../utils/languageDetection';
 
 const StyledFormControl = styled(FormControl)(({ theme }) => ({
-  background: 'rgba(19, 19, 47, 0.6)',
+  background: '#121212',
   backdropFilter: 'blur(10px)',
   borderRadius: '18px',
   minWidth: '100px !important',
@@ -59,24 +59,24 @@ const StyledFormControl = styled(FormControl)(({ theme }) => ({
   },
   '& .MuiOutlinedInput-root': {
     '& fieldset': {
-      borderColor: 'rgba(108, 99, 255, 0.1)',
+      borderColor: 'rgba(255, 255, 255, 0.16)',
       borderRadius: '18px',
       [theme.breakpoints.down('sm')]: {
         borderRadius: '16px',
       },
     },
     '&:hover fieldset': {
-      borderColor: 'rgba(108, 99, 255, 0.3)',
+      borderColor: 'rgba(255, 255, 255, 0.28)',
     },
     '&.Mui-focused fieldset': {
-      borderColor: theme.palette.primary.main,
+      borderColor: 'rgba(255, 255, 255, 0.36)',
     },
   },
   // Style the dropdown menu
   '& .MuiMenu-paper': {
-    backgroundColor: 'rgba(19, 19, 47, 0.95)',
+    backgroundColor: '#1a1a1a',
     backdropFilter: 'blur(12px)',
-    border: '1px solid rgba(108, 99, 255, 0.15)',
+    border: '1px solid rgba(255, 255, 255, 0.14)',
     borderRadius: '12px',
     boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2)',
   },
@@ -186,9 +186,9 @@ const Filters: React.FC<FiltersProps> = ({
           MenuProps={{
             PaperProps: {
               sx: {
-                backgroundColor: 'rgba(19, 19, 47, 0.95)',
+                backgroundColor: '#1a1a1a',
                 backdropFilter: 'blur(12px)',
-                border: '1px solid rgba(108, 99, 255, 0.15)',
+                border: '1px solid rgba(255, 255, 255, 0.14)',
                 borderRadius: '12px',
                 boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2)',
                 maxHeight: 200,
@@ -196,12 +196,12 @@ const Filters: React.FC<FiltersProps> = ({
                   color: 'rgba(255, 255, 255, 0.9)',
                   fontSize: '0.75rem',
                   '&:hover': {
-                    backgroundColor: 'rgba(108, 99, 255, 0.1)',
+                    backgroundColor: 'rgba(255, 255, 255, 0.12)',
                   },
                   '&.Mui-selected': {
-                    backgroundColor: 'rgba(108, 99, 255, 0.2)',
+                    backgroundColor: 'rgba(255, 255, 255, 0.2)',
                     '&:hover': {
-                      backgroundColor: 'rgba(108, 99, 255, 0.25)',
+                      backgroundColor: 'rgba(255, 255, 255, 0.24)',
                     },
                   },
                 },
@@ -224,9 +224,9 @@ const Filters: React.FC<FiltersProps> = ({
           MenuProps={{
             PaperProps: {
               sx: {
-                backgroundColor: 'rgba(19, 19, 47, 0.95)',
+                backgroundColor: '#1a1a1a',
                 backdropFilter: 'blur(12px)',
-                border: '1px solid rgba(108, 99, 255, 0.15)',
+                border: '1px solid rgba(255, 255, 255, 0.14)',
                 borderRadius: '12px',
                 boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2)',
                 maxHeight: 200,
@@ -234,12 +234,12 @@ const Filters: React.FC<FiltersProps> = ({
                   color: 'rgba(255, 255, 255, 0.9)',
                   fontSize: '0.75rem',
                   '&:hover': {
-                    backgroundColor: 'rgba(108, 99, 255, 0.1)',
+                    backgroundColor: 'rgba(255, 255, 255, 0.12)',
                   },
                   '&.Mui-selected': {
-                    backgroundColor: 'rgba(108, 99, 255, 0.2)',
+                    backgroundColor: 'rgba(255, 255, 255, 0.2)',
                     '&:hover': {
-                      backgroundColor: 'rgba(108, 99, 255, 0.25)',
+                      backgroundColor: 'rgba(255, 255, 255, 0.24)',
                     },
                   },
                 },
@@ -247,8 +247,8 @@ const Filters: React.FC<FiltersProps> = ({
             },
           }}
         >
-          <MenuItem value="desc">↓ Desc</MenuItem>
-          <MenuItem value="asc">↑ Asc</MenuItem>
+          <MenuItem value="desc">Desc</MenuItem>
+          <MenuItem value="asc">Asc</MenuItem>
         </Select>
       </StyledFormControl>
 
@@ -262,9 +262,9 @@ const Filters: React.FC<FiltersProps> = ({
             MenuProps={{
               PaperProps: {
                 sx: {
-                  backgroundColor: 'rgba(19, 19, 47, 0.95)',
+                  backgroundColor: '#1a1a1a',
                   backdropFilter: 'blur(12px)',
-                  border: '1px solid rgba(108, 99, 255, 0.15)',
+                  border: '1px solid rgba(255, 255, 255, 0.14)',
                   borderRadius: '12px',
                   boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2)',
                   maxHeight: 300,
@@ -272,12 +272,12 @@ const Filters: React.FC<FiltersProps> = ({
                     color: 'rgba(255, 255, 255, 0.9)',
                     fontSize: '0.75rem',
                     '&:hover': {
-                      backgroundColor: 'rgba(108, 99, 255, 0.1)',
+                      backgroundColor: 'rgba(255, 255, 255, 0.12)',
                     },
                     '&.Mui-selected': {
-                      backgroundColor: 'rgba(108, 99, 255, 0.2)',
+                      backgroundColor: 'rgba(255, 255, 255, 0.2)',
                       '&:hover': {
-                        backgroundColor: 'rgba(108, 99, 255, 0.25)',
+                        backgroundColor: 'rgba(255, 255, 255, 0.24)',
                       },
                     },
                   },
@@ -303,10 +303,10 @@ const Filters: React.FC<FiltersProps> = ({
             size="small"
             sx={{
               '& .MuiSwitch-switchBase.Mui-checked': {
-                color: '#ff6584',
+                color: '#ff0000',
               },
               '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                backgroundColor: '#ff6584',
+                backgroundColor: '#ff0000',
               },
             }}
           />
@@ -324,10 +324,10 @@ const Filters: React.FC<FiltersProps> = ({
         }
         sx={{
           margin: 0,
-          background: 'rgba(19, 19, 47, 0.6)',
+          background: '#121212',
           backdropFilter: 'blur(10px)',
           borderRadius: '18px',
-          border: '1px solid rgba(108, 99, 255, 0.1)',
+          border: '1px solid rgba(255, 255, 255, 0.12)',
           padding: theme.spacing(0.25, 0.75),
           '& .MuiFormControlLabel-label': {
             marginLeft: '4px',
@@ -348,13 +348,13 @@ const Filters: React.FC<FiltersProps> = ({
           onClick={handleFilterClick}
           aria-describedby={id}
           sx={{
-            backgroundColor: 'rgba(19, 19, 47, 0.6)',
+            backgroundColor: '#121212',
             backdropFilter: 'blur(10px)',
-            border: '1px solid rgba(108, 99, 255, 0.1)',
+            border: '1px solid rgba(255, 255, 255, 0.12)',
             borderRadius: '50%',
             p: '6px',
             '&:hover': {
-              backgroundColor: 'rgba(19, 19, 47, 0.8)',
+              backgroundColor: '#1a1a1a',
             }
           }}
         >
@@ -378,9 +378,9 @@ const Filters: React.FC<FiltersProps> = ({
               mt: 1,
               p: 1.5,
               borderRadius: '12px',
-              backgroundColor: 'rgba(19, 19, 47, 0.95)',
+              backgroundColor: '#1a1a1a',
               backdropFilter: 'blur(12px)',
-              border: '1px solid rgba(108, 99, 255, 0.15)',
+              border: '1px solid rgba(255, 255, 255, 0.14)',
               boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2)',
             }
           }}
@@ -402,16 +402,16 @@ const Filters: React.FC<FiltersProps> = ({
         onClose={cancelNsfwChange}
         PaperProps={{
           sx: {
-            backgroundColor: 'rgba(19, 19, 47, 0.95)',
+            backgroundColor: '#1a1a1a',
             backdropFilter: 'blur(12px)',
-            border: '1px solid rgba(108, 99, 255, 0.15)',
+            border: '1px solid rgba(255, 255, 255, 0.14)',
             borderRadius: '16px',
             color: '#fff',
           }
         }}
       >
         <DialogTitle sx={{ 
-          color: '#ff6584', 
+          color: '#ff0000', 
           fontWeight: 600,
           borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
         }}>
@@ -446,7 +446,7 @@ const Filters: React.FC<FiltersProps> = ({
             onClick={confirmNsfwChange}
             variant="contained"
             sx={{ 
-              backgroundColor: '#ff6584',
+              backgroundColor: '#ff0000',
               '&:hover': {
                 backgroundColor: '#e55a75',
               }
@@ -461,3 +461,6 @@ const Filters: React.FC<FiltersProps> = ({
 };
 
 export default Filters;
+
+
+

@@ -12,9 +12,9 @@ import { TrendingUp as TrendingIcon } from '@mui/icons-material';
 import { motion } from 'framer-motion';
 
 const StyledIconButton = styled(IconButton)(({ theme }) => ({
-  background: 'linear-gradient(135deg, rgba(108, 99, 255, 0.1) 0%, rgba(255, 101, 132, 0.1) 100%)',
+  background: '#121212',
   backdropFilter: 'blur(10px)',
-  border: '1px solid rgba(108, 99, 255, 0.2)',
+  border: '1px solid rgba(255, 255, 255, 0.16)',
   borderRadius: '20px',
   padding: '8px 12px',
   transition: 'all 0.3s ease-in-out',
@@ -27,28 +27,28 @@ const StyledIconButton = styled(IconButton)(({ theme }) => ({
     left: 0,
     right: 0,
     bottom: 0,
-    background: 'linear-gradient(135deg, rgba(108, 99, 255, 0.05) 0%, rgba(255, 101, 132, 0.05) 100%)',
+    background: 'rgba(255, 255, 255, 0.04)',
     opacity: 0,
     transition: 'opacity 0.3s ease-in-out',
     zIndex: -1,
   },
   '&:hover': {
-    background: 'linear-gradient(135deg, rgba(108, 99, 255, 0.2) 0%, rgba(255, 101, 132, 0.2) 100%)',
-    borderColor: 'rgba(108, 99, 255, 0.4)',
+    background: '#1a1a1a',
+    borderColor: 'rgba(255, 255, 255, 0.28)',
     transform: 'scale(1.05)',
     '&::before': {
       opacity: 1,
     },
   },
   '&.active': {
-    background: 'linear-gradient(135deg, rgba(108, 99, 255, 0.3) 0%, rgba(255, 101, 132, 0.3) 100%)',
-    borderColor: 'rgba(108, 99, 255, 0.6)',
-    boxShadow: '0 4px 12px rgba(108, 99, 255, 0.3)',
+    background: 'rgba(255, 0, 0, 0.16)',
+    borderColor: 'rgba(255, 0, 0, 0.45)',
+    boxShadow: '0 4px 12px rgba(255, 0, 0, 0.22)',
     '& .MuiSvgIcon-root': {
-      color: '#6c63ff',
+      color: '#ff4e45',
     },
     '& span': {
-      color: '#6c63ff',
+      color: '#ff4e45',
     },
   },
   [theme.breakpoints.down('sm')]: {
@@ -60,21 +60,21 @@ const StyledMenuItem = styled(MenuItem)(({ theme }) => ({
   fontSize: '0.875rem',
   padding: theme.spacing(1, 1.5),
   '&:hover': {
-    backgroundColor: 'rgba(108, 99, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
   '&.Mui-selected': {
-    backgroundColor: 'rgba(108, 99, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
     '&:hover': {
-      backgroundColor: 'rgba(108, 99, 255, 0.25)',
+      backgroundColor: 'rgba(255, 255, 255, 0.2)',
     },
   },
 }));
 
 const StyledMenu = styled(Menu)(({ theme }) => ({
   '& .MuiPaper-root': {
-    backgroundColor: 'rgba(19, 19, 47, 0.95)',
+    backgroundColor: '#1a1a1a',
     backdropFilter: 'blur(12px)',
-    border: '1px solid rgba(108, 99, 255, 0.15)',
+    border: '1px solid rgba(255, 255, 255, 0.16)',
     borderRadius: '12px',
     boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2)',
     minWidth: '120px',
@@ -142,7 +142,7 @@ const TrendingButton: React.FC<TrendingButtonProps> = ({
           sx={{
             '& .MuiSvgIcon-root': {
               fontSize: { xs: '1.1rem', sm: '1.25rem' },
-              color: isActive ? '#6c63ff' : 'text.secondary',
+              color: isActive ? '#ff4e45' : 'text.secondary',
               transition: 'color 0.2s ease-in-out',
             },
           }}
@@ -235,7 +235,7 @@ const TrendingButton: React.FC<TrendingButtonProps> = ({
               handleClose();
             }}
             sx={{
-              borderTop: '1px solid rgba(108, 99, 255, 0.1)',
+              borderTop: '1px solid rgba(255, 255, 255, 0.12)',
               marginTop: 0.5,
             }}
           >

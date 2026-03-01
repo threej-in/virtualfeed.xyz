@@ -9,6 +9,18 @@ export const getRedditAudioProxyUrl = (audioUrl: string): string => {
     return `${API_URL}/videos/reddit-audio?${params.toString()}`;
 };
 
+export const getRedditVideoProxyUrl = (videoUrl: string): string => {
+    const params = new URLSearchParams();
+    params.append('url', videoUrl);
+    return `${API_URL}/videos/reddit-video?${params.toString()}`;
+};
+
+export const getRedditThumbnailProxyUrl = (thumbnailUrl: string): string => {
+    const params = new URLSearchParams();
+    params.append('url', thumbnailUrl);
+    return `${API_URL}/videos/reddit-thumbnail?${params.toString()}`;
+};
+
 export interface VideoResponse {
     videos: Video[];
     total: number;

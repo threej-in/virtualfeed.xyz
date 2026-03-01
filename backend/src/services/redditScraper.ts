@@ -37,8 +37,103 @@ export class RedditScraper {
         return null;
     }
 
+    private static getQuerySuffix(url: string): string {
+        return url.includes('?') ? url.substring(url.indexOf('?')) : '';
+    }
+
+    private static getRedditVideoIdFromUrl(url: string | undefined): string {
+        if (!url || typeof url !== 'string') return '';
+        const match = url.match(/v\.redd\.it\/([^/?]+)/i);
+        return match?.[1] || '';
+    }
+
+    private static buildRedditMp4Candidates(videoId: string, querySuffix: string): string[] {
+        if (!videoId) return [];
+        const suffix = querySuffix || '';
+        return [
+            `https://v.redd.it/${videoId}/DASH_1080.mp4${suffix}`,
+            `https://v.redd.it/${videoId}/DASH_720.mp4${suffix}`,
+            `https://v.redd.it/${videoId}/DASH_480.mp4${suffix}`,
+            `https://v.redd.it/${videoId}/DASH_360.mp4${suffix}`,
+            `https://v.redd.it/${videoId}/DASH_240.mp4${suffix}`,
+            `https://v.redd.it/${videoId}/DASH_96.mp4${suffix}`
+        ];
+    }
+
+    private static derivePlayableRedditVideoUrl(redditVideo: any): string {
+        const fallbackUrl = this.decodeRedditUrl(redditVideo?.fallback_url as string | undefined);
+        const dashUrl = this.decodeRedditUrl(redditVideo?.dash_url as string | undefined);
+        const hlsUrl = this.decodeRedditUrl(redditVideo?.hls_url as string | undefined);
+
+        if (fallbackUrl && /\/DASH_\d+\.mp4/i.test(fallbackUrl)) {
+            return fallbackUrl;
+        }
+
+        const seedUrl = fallbackUrl || dashUrl || hlsUrl;
+        const videoId = this.getRedditVideoIdFromUrl(seedUrl);
+        if (!videoId) {
+            return '';
+        }
+
+        const querySuffix = this.getQuerySuffix(seedUrl);
+        const mp4Candidates = this.buildRedditMp4Candidates(videoId, querySuffix);
+        return mp4Candidates[0] || '';
+    }
+
+    private static getGallerySource(post: Submission): any | null {
+        const asAny = post as any;
+        if (asAny?.gallery_data?.items && asAny?.media_metadata) {
+            return asAny;
+        }
+
+        const crosspost = asAny?.crosspost_parent_list?.[0];
+        if (crosspost?.gallery_data?.items && crosspost?.media_metadata) {
+            return crosspost;
+        }
+
+        return null;
+    }
+
+    private static getGalleryVideoUrl(post: Submission): string | null {
+        const source = this.getGallerySource(post);
+        if (!source) return null;
+
+        const items = Array.isArray(source.gallery_data?.items) ? source.gallery_data.items : [];
+        for (const item of items) {
+            const mediaId = item?.media_id;
+            if (!mediaId) continue;
+
+            const mediaMeta = source.media_metadata?.[mediaId];
+            const encodedMp4 = mediaMeta?.s?.mp4 || mediaMeta?.s?.u;
+            const decodedUrl = this.decodeRedditUrl(encodedMp4);
+            if (/^https?:\/\//i.test(decodedUrl) && /\.(mp4|webm)(\?|$)/i.test(decodedUrl)) {
+                return decodedUrl;
+            }
+        }
+
+        return null;
+    }
+
     private static getRedditPreviewThumbnail(post: Submission): string | null {
         const asAny = post as any;
+        const redditVideo = this.getPostRedditVideo(post);
+        const redditVideoThumbnail = this.decodeRedditUrl(redditVideo?.thumbnail_url as string | undefined);
+        if (typeof redditVideoThumbnail === 'string' && redditVideoThumbnail.startsWith('http')) {
+            return redditVideoThumbnail;
+        }
+
+        const gallerySource = this.getGallerySource(post);
+        if (gallerySource?.gallery_data?.items?.length) {
+            const firstItem = gallerySource.gallery_data.items[0];
+            const firstId = firstItem?.media_id;
+            const galleryPreview =
+                this.decodeRedditUrl(gallerySource?.media_metadata?.[firstId]?.s?.u) ||
+                this.decodeRedditUrl(gallerySource?.media_metadata?.[firstId]?.s?.gif);
+            if (typeof galleryPreview === 'string' && galleryPreview.startsWith('http')) {
+                return galleryPreview;
+            }
+        }
+
         const previewUrl = asAny?.preview?.images?.[0]?.source?.url
             || asAny?.crosspost_parent_list?.[0]?.preview?.images?.[0]?.source?.url;
         if (typeof previewUrl === 'string' && previewUrl.startsWith('http')) {
@@ -172,27 +267,16 @@ export class RedditScraper {
             // Extract the video ID for better handling with Reddit videos
             let videoId = '';
             let redditVideo: any = null;
+            let galleryVideoUrl = '';
             
             // Check for Reddit-hosted videos
             redditVideo = this.getPostRedditVideo(post);
-            if (post.is_video && redditVideo) {
-                const fallbackUrl = this.decodeRedditUrl(redditVideo?.fallback_url as string | undefined);
-                const dashUrl = this.decodeRedditUrl(redditVideo?.dash_url as string | undefined);
-                const hlsUrl = this.decodeRedditUrl(redditVideo?.hls_url as string | undefined);
-                
-                if (fallbackUrl) {
-                    const match = fallbackUrl.match(/\/([a-zA-Z0-9]+)\//i);
-                    if (match && match[1]) videoId = match[1];
-                }
-                
-                // redditp-style: use exact Reddit fallback MP4 URL for playback.
-                if (fallbackUrl && /\/DASH_\d+\.mp4/i.test(fallbackUrl)) {
-                    videoUrl = fallbackUrl;
-                } else if (dashUrl || hlsUrl) {
-                    // Keep dash/hls as metadata-only options; skip ingest when no playable fallback mp4 exists.
-                    videoUrl = '';
-                }
-            } 
+            if (redditVideo) {
+                videoUrl = this.derivePlayableRedditVideoUrl(redditVideo);
+                videoId = this.getRedditVideoIdFromUrl(videoUrl);
+            } else if ((galleryVideoUrl = this.getGalleryVideoUrl(post) || '')) {
+                videoUrl = galleryVideoUrl;
+            }
             // Check for direct video links
             else if (post.url?.match(/\.(mp4|webm)$/i)) {
                 videoUrl = post.url;
@@ -203,6 +287,9 @@ export class RedditScraper {
                 return false;
             }
 
+            if (!videoId) {
+                videoId = this.getRedditVideoIdFromUrl(videoUrl);
+            }
             if (!videoUrl) {
                 return false;
             }
@@ -221,15 +308,8 @@ export class RedditScraper {
             }
 
             if (videoMetadata.url.includes('v.redd.it') && videoId) {
-                // Only attempt thumbnail generation if we do not already have a usable preview thumbnail.
-                if (!thumbnailUrl) {
-                    thumbnailUrl = await VideoProcessor.generateThumbnail(videoMetadata.url);
-                }
-                
-                // Ensure thumbnailUrl is never undefined
-                if (!thumbnailUrl) {
-                    thumbnailUrl = await VideoProcessor.generateThumbnail(videoMetadata.url);
-                }
+                // Do not rely on ffmpeg for v.redd.it thumbnails; keep only Reddit-provided previews.
+                if (!thumbnailUrl) return false;
             } else {
                 // For non-Reddit videos, use the standard method
                 if (!thumbnailUrl) {
@@ -275,33 +355,26 @@ export class RedditScraper {
             
             // For Reddit videos, try to extract audio URL
             let audioUrl = '';
-            let redditVideoSources: { fallbackUrl?: string; dashUrl?: string; hlsUrl?: string } | undefined;
+            let redditVideoSources: { fallbackUrl?: string; dashUrl?: string; hlsUrl?: string; mp4Candidates?: string[] } | undefined;
             if (videoMetadata.url.includes('v.redd.it')) {
                 const fallbackUrl = this.decodeRedditUrl(redditVideo?.fallback_url as string | undefined) || undefined;
                 const dashUrl = this.decodeRedditUrl(redditVideo?.dash_url as string | undefined) || undefined;
                 const hlsUrl = this.decodeRedditUrl(redditVideo?.hls_url as string | undefined) || undefined;
+                const querySeed = fallbackUrl || dashUrl || hlsUrl || videoMetadata.url;
+                const videoIdFromSources = this.getRedditVideoIdFromUrl(querySeed);
+                const querySuffix = this.getQuerySuffix(querySeed);
+                const mp4Candidates = this.buildRedditMp4Candidates(videoIdFromSources, querySuffix);
 
                 if (fallbackUrl || dashUrl || hlsUrl) {
                     redditVideoSources = {
                         fallbackUrl,
                         dashUrl,
-                        hlsUrl
+                        hlsUrl,
+                        mp4Candidates
                     };
                 }
-
-                const querySuffix = fallbackUrl && fallbackUrl.includes('?')
-                    ? fallbackUrl.substring(fallbackUrl.indexOf('?'))
-                    : '';
-
-                if (videoId) {
-                    audioUrl = `https://v.redd.it/${videoId}/DASH_AUDIO_128.mp4${querySuffix}`;
-                } else {
-                    const match = videoMetadata.url.match(/v\.redd\.it\/([^/?]+)/i);
-                    if (match && match[1]) videoId = match[1];
-                    
-                    if (videoId) {
-                        audioUrl = `https://v.redd.it/${videoId}/DASH_AUDIO_128.mp4${querySuffix}`;
-                    }
+                if (videoIdFromSources) {
+                    audioUrl = `https://v.redd.it/${videoIdFromSources}/DASH_AUDIO_128.mp4${querySuffix}`;
                 }
             }
             
@@ -567,16 +640,17 @@ export class RedditScraper {
                     2
                 );
 
-                if (!post || (!post.is_video && !(post.media as any)?.reddit_video)) {
+                const redditVideo = this.getPostRedditVideo(post as Submission);
+                if (!post || !redditVideo) {
                     await video.update({ blacklisted: true });
                     continue;
                 }
 
-                const redditVideo = this.getPostRedditVideo(post as Submission);
                 const fallbackUrl = this.decodeRedditUrl(redditVideo?.fallback_url as string | undefined) || undefined;
                 const dashUrl = this.decodeRedditUrl(redditVideo?.dash_url as string | undefined) || undefined;
                 const hlsUrl = this.decodeRedditUrl(redditVideo?.hls_url as string | undefined) || undefined;
-                const refreshedVideoUrl = fallbackUrl || video.videoUrl;
+                const refreshedVideoUrl = this.derivePlayableRedditVideoUrl(redditVideo) || video.videoUrl;
+                const refreshedThumbnailUrl = this.getRedditPreviewThumbnail(post as Submission) || video.thumbnailUrl;
 
                 // If we still don't have a playable fallback mp4, blacklist to avoid dead cards.
                 if (!refreshedVideoUrl || !/\/DASH_\d+\.mp4/i.test(refreshedVideoUrl)) {
@@ -592,6 +666,9 @@ export class RedditScraper {
                 const refreshedAudioUrl = match?.[1]
                     ? `https://v.redd.it/${match[1]}/DASH_AUDIO_128.mp4${querySuffix}`
                     : metadata?.audioUrl || '';
+                const refreshedCandidates = match?.[1]
+                    ? this.buildRedditMp4Candidates(match[1], querySuffix)
+                    : [];
 
                 const refreshedMetadata = {
                     ...metadata,
@@ -602,13 +679,15 @@ export class RedditScraper {
                     redditVideoSources: {
                         fallbackUrl,
                         dashUrl,
-                        hlsUrl
+                        hlsUrl,
+                        mp4Candidates: refreshedCandidates
                     },
                     mediaRefreshedAt: new Date().toISOString()
                 };
 
                 await video.update({
                     videoUrl: refreshedVideoUrl,
+                    thumbnailUrl: refreshedThumbnailUrl,
                     likes: post.score,
                     metadata: refreshedMetadata
                 });

@@ -47,10 +47,10 @@ const Header = styled(Box)(({ theme }) => ({
   alignItems: "center",
   padding: theme.spacing(0.75, 1),
   marginBottom: theme.spacing(0),
-  background: "rgba(19, 19, 47, 0.95)",
-  backdropFilter: "blur(12px)",
-  boxShadow: "0 4px 16px rgba(0, 0, 0, 0.2)",
-  border: "1px solid rgba(108, 99, 255, 0.15)",
+  background: "#0f0f0f",
+  backdropFilter: "blur(8px)",
+  boxShadow: "0 2px 10px rgba(0, 0, 0, 0.35)",
+  borderBottom: "1px solid rgba(255, 255, 255, 0.12)",
   overflow: "hidden",
   transition: "all 0.3s ease",
   position: "sticky",
@@ -65,8 +65,7 @@ const Header = styled(Box)(({ theme }) => ({
   },
   right: 0,
   "&:hover": {
-    boxShadow: "0 6px 20px rgba(0, 0, 0, 0.25)",
-    borderColor: "rgba(108, 99, 255, 0.25)",
+    boxShadow: "0 4px 14px rgba(0, 0, 0, 0.45)",
   },
   [theme.breakpoints.down("xs")]: {
     flexDirection: "column",
@@ -152,6 +151,7 @@ function App() {
   const [isFallbackContent, setIsFallbackContent] = useState(false);
   const [isVideoSubmissionOpen, setIsVideoSubmissionOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
   const [playingVideoId, setPlayingVideoId] = useState<number | null>(null);
   const [focusedVideoId, setFocusedVideoId] = useState<number | null>(null);
   const inFlightRequestRef = useRef(false);
@@ -428,7 +428,18 @@ function App() {
   };
 
   const handlePlatformChange = (platform: string) => {
-    setFilterValues((prev) => ({ ...prev, platform }));
+    setFilterValues((prev) => {
+      if (platform === "youtube") {
+        return {
+          ...prev,
+          platform,
+          sortBy: "views",
+          order: "desc",
+        };
+      }
+
+      return { ...prev, platform };
+    });
   };
 
   const handleLanguageChange = (language: string) => {
@@ -521,9 +532,15 @@ function App() {
             >
               {/* Mobile Menu Button */}
               <IconButton
-                onClick={() => setIsSidebarOpen(true)}
+                onClick={() => {
+                  if (isLargeDevice) {
+                    setIsDesktopSidebarOpen((prev) => !prev);
+                  } else {
+                    setIsSidebarOpen(true);
+                  }
+                }}
                 sx={{
-                  display: { xs: "flex", md: "none" },
+                  display: { xs: "flex", md: "flex" },
                   mr: 1,
                   color: "rgba(255, 255, 255, 0.8)",
                   padding: { xs: 0.5, sm: 1 },
@@ -557,7 +574,7 @@ function App() {
                 }}
                 sx={{
                   fontWeight: 700,
-                  background: "linear-gradient(45deg, #6c63ff, #ff6584)",
+                  background: "linear-gradient(45deg, #ff0000, #ffffff)",
                   WebkitBackgroundClip: "text",
                   WebkitTextFillColor: "transparent",
                   mr: { xs: 0, md: 1 },
@@ -654,7 +671,7 @@ function App() {
                 }}
               >
                 {/* Desktop Sidebar */}
-                <Box sx={{ display: { xs: "none", md: "block" } }}>
+                <Box sx={{ display: { xs: "none", md: isDesktopSidebarOpen ? "block" : "none" } }}>
                   <Sidebar
                     currentPlatform={filterValues.platform || ""}
                     onPlatformChange={handlePlatformChange}
@@ -667,115 +684,137 @@ function App() {
                   sx={{
                     flex: 1,
                     p: { xs: 0, md: 3 },
-                    marginLeft: { md: "260px" },
-                    width: { xs: "100%", md: "auto" },
+                    marginLeft: { md: isDesktopSidebarOpen ? "260px" : 0 },
+                    width: "100%",
+                    minWidth: 0,
                     height: "100%",
                     display: "flex",
                     flexDirection: "column",
+                    overflow: "hidden",
+                    position: "relative",
                   }}
                 >
-                  <VideoGrid
-                    videos={videos}
-                    onVideoClick={(video) => {
-                      if (isLargeDevice) {
-                        // On large devices, always use popup for both YouTube and Reddit videos
-                        if (video.platform === "youtube") {
-                          setSelectedVideo(
-                            selectedVideo?.id === video.id ? null : video
-                          );
-                          setPlayingVideoId(null); // Stop any in-place playing video
-                          setFocusedVideoId(null);
+                  <Box sx={{ flex: 1, minHeight: 0, position: "relative" }}>
+                    <VideoGrid
+                      videos={videos}
+                      onVideoClick={(video) => {
+                        if (isLargeDevice) {
+                          // On large devices, always use popup for both YouTube and Reddit videos
+                          if (video.platform === "youtube") {
+                            setSelectedVideo(
+                              selectedVideo?.id === video.id ? null : video
+                            );
+                            setPlayingVideoId(null); // Stop any in-place playing video
+                            setFocusedVideoId(null);
+                          } else {
+                            setSelectedVideo(
+                              selectedVideo?.id === video.id ? null : video
+                            );
+                            setPlayingVideoId(null); // Stop any playing YouTube video
+                            setFocusedVideoId(null);
+                          }
                         } else {
-                          setSelectedVideo(
-                            selectedVideo?.id === video.id ? null : video
-                          );
-                          setPlayingVideoId(null); // Stop any playing YouTube video
-                          setFocusedVideoId(null);
+                          // On mobile devices, use the existing autoplay behavior
+                          if (video.platform === "youtube") {
+                            // For YouTube videos, manually toggle playing state (override autoplay)
+                            setPlayingVideoId(
+                              playingVideoId === video.id ? null : video.id
+                            );
+                            setFocusedVideoId(
+                              playingVideoId === video.id ? null : video.id
+                            );
+                            setSelectedVideo(null); // Don't open popup for YouTube
+                          } else {
+                            // For Reddit videos, manually toggle popup (override autoplay)
+                            setSelectedVideo(
+                              selectedVideo?.id === video.id ? null : video
+                            );
+                            setPlayingVideoId(null); // Stop any playing YouTube video
+                            setFocusedVideoId(
+                              selectedVideo?.id === video.id ? null : video.id
+                            );
+                          }
                         }
-                      } else {
-                        // On mobile devices, use the existing autoplay behavior
-                        if (video.platform === "youtube") {
-                          // For YouTube videos, manually toggle playing state (override autoplay)
-                          setPlayingVideoId(
-                            playingVideoId === video.id ? null : video.id
-                          );
-                          setFocusedVideoId(
-                            playingVideoId === video.id ? null : video.id
-                          );
-                          setSelectedVideo(null); // Don't open popup for YouTube
-                        } else {
-                          // For Reddit videos, manually toggle popup (override autoplay)
-                          setSelectedVideo(
-                            selectedVideo?.id === video.id ? null : video
-                          );
-                          setPlayingVideoId(null); // Stop any playing YouTube video
-                          setFocusedVideoId(
-                            selectedVideo?.id === video.id ? null : video.id
-                          );
+                      }}
+                      lastVideoRef={lastVideoElementRef}
+                      playingVideoId={playingVideoId}
+                      focusedVideoId={focusedVideoId}
+                      videoFocusObserver={videoFocusObserver}
+                      isLargeDevice={isLargeDevice}
+                      onDesktopVideoHoverStart={(videoId) => {
+                        if (isLargeDevice) {
+                          hoverCandidateVideoIdRef.current = videoId;
+                          if (hoverPlayTimeoutRef.current) {
+                            clearTimeout(hoverPlayTimeoutRef.current);
+                          }
+
+                          hoverPlayTimeoutRef.current = setTimeout(() => {
+                            if (
+                              hoverCandidateVideoIdRef.current === videoId &&
+                              isLargeDevice
+                            ) {
+                              setPlayingVideoId(videoId);
+                              setFocusedVideoId(videoId);
+                            }
+                          }, 1200);
                         }
-                      }
-                    }}
-                    lastVideoRef={lastVideoElementRef}
-                    playingVideoId={playingVideoId}
-                    focusedVideoId={focusedVideoId}
-                    videoFocusObserver={videoFocusObserver}
-                    isLargeDevice={isLargeDevice}
-                    onDesktopVideoHoverStart={(videoId) => {
-                      if (isLargeDevice) {
-                        hoverCandidateVideoIdRef.current = videoId;
+                      }}
+                      onDesktopVideoHoverEnd={(videoId) => {
+                        if (hoverCandidateVideoIdRef.current === videoId) {
+                          hoverCandidateVideoIdRef.current = null;
+                        }
                         if (hoverPlayTimeoutRef.current) {
                           clearTimeout(hoverPlayTimeoutRef.current);
+                          hoverPlayTimeoutRef.current = null;
                         }
+                        if (isLargeDevice && playingVideoId === videoId) {
+                          setPlayingVideoId(null);
+                          setFocusedVideoId(null);
+                        }
+                      }}
+                      onResetFilters={() => {
+                        // Reset all filters and return to homepage
+                        setFilterValues({
+                          limit: 12,
+                          sortBy: "views",
+                          order: "desc",
+                          search: "",
+                          platform: "", // Show all platforms by default
+                          showNsfw: false,
+                          trending: undefined, // Show recent videos by default
+                          language: "all",
+                        });
+                        // Reset videos array to trigger a fresh load
+                        setVideos([]);
+                        setCurrentPage(1);
+                        setHasMore(true);
+                      }}
+                    />
 
-                        hoverPlayTimeoutRef.current = setTimeout(() => {
-                          if (
-                            hoverCandidateVideoIdRef.current === videoId &&
-                            isLargeDevice
-                          ) {
-                            setPlayingVideoId(videoId);
-                            setFocusedVideoId(videoId);
-                          }
-                        }, 1200);
-                      }
-                    }}
-                    onDesktopVideoHoverEnd={(videoId) => {
-                      if (hoverCandidateVideoIdRef.current === videoId) {
-                        hoverCandidateVideoIdRef.current = null;
-                      }
-                      if (hoverPlayTimeoutRef.current) {
-                        clearTimeout(hoverPlayTimeoutRef.current);
-                        hoverPlayTimeoutRef.current = null;
-                      }
-                      if (isLargeDevice && playingVideoId === videoId) {
-                        setPlayingVideoId(null);
-                        setFocusedVideoId(null);
-                      }
-                    }}
-                    onResetFilters={() => {
-                      // Reset all filters and return to homepage
-                      setFilterValues({
-                        limit: 12,
-                        sortBy: "views",
-                        order: "desc",
-                        search: "",
-                        platform: "", // Show all platforms by default
-                        showNsfw: false,
-                        trending: undefined, // Show recent videos by default
-                        language: "all",
-                      });
-                      // Reset videos array to trigger a fresh load
-                      setVideos([]);
-                      setCurrentPage(1);
-                      setHasMore(true);
-                    }}
-                  />
-
-                  {/* Loading indicator at bottom */}
-                  {loading && videos.length > 0 && (
-                    <Box display="flex" justifyContent="center" p={4}>
-                      <CircularProgress size={40} />
-                    </Box>
-                  )}
+                    {/* Loading indicator overlay - doesn't shift layout */}
+                    {loading && videos.length > 0 && (
+                      <Box
+                        sx={{
+                          position: "absolute",
+                          right: { xs: 12, md: 20 },
+                          bottom: { xs: 12, md: 20 },
+                          width: 48,
+                          height: 48,
+                          borderRadius: "50%",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          background: "rgba(10, 10, 10, 0.72)",
+                          border: "1px solid rgba(255, 255, 255, 0.18)",
+                          backdropFilter: "blur(4px)",
+                          pointerEvents: "none",
+                          zIndex: 20,
+                        }}
+                      >
+                        <CircularProgress size={26} />
+                      </Box>
+                    )}
+                  </Box>
 
                   {/* No more videos message removed - clean infinite scroll experience */}
 
@@ -819,11 +858,11 @@ function App() {
               width: "100%",
               maxWidth: "320px",
               background:
-                "linear-gradient(135deg, rgba(19, 19, 47, 0.98) 0%, rgba(25, 25, 60, 0.95) 100%)",
+                "#0f0f0f",
               backdropFilter: "blur(25px)",
               border: "none",
               boxShadow: "8px 0 30px rgba(0, 0, 0, 0.4)",
-              borderRight: "1px solid rgba(108, 99, 255, 0.2)",
+              borderRight: "1px solid rgba(255, 255, 255, 0.12)",
             },
           }}
         >
@@ -833,7 +872,7 @@ function App() {
               display: "flex",
               flexDirection: "column",
               background:
-                "linear-gradient(180deg, rgba(108, 99, 255, 0.05) 0%, transparent 50%, rgba(255, 101, 132, 0.05) 100%)",
+                "#0f0f0f",
             }}
           >
             {/* Header with Close Button */}
@@ -856,7 +895,7 @@ function App() {
                   variant="h6"
                   sx={{
                     fontWeight: 700,
-                    background: "linear-gradient(45deg, #6c63ff, #ff6584)",
+                    background: "linear-gradient(45deg, #ff0000, #ffffff)",
                     WebkitBackgroundClip: "text",
                     WebkitTextFillColor: "transparent",
                     fontSize: "1.25rem",

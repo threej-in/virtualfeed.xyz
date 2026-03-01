@@ -31,7 +31,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSwipeable } from 'react-swipeable';
 import { Video } from '../../types/Video';
-import { updateVideoStats, getRedditAudioProxyUrl, likeVideoInternal } from '../../services/api';
+import { updateVideoStats, getRedditAudioProxyUrl, getRedditVideoProxyUrl, likeVideoInternal } from '../../services/api';
 
 interface VideoPlayerProps {
     videos: Video[];
@@ -187,12 +187,16 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
             : '';
 
         if (currentVideo?.platform === 'reddit') {
-            if (typeof sourceFallback === 'string' && sourceFallback.trim()) return sourceFallback;
+            if (typeof sourceFallback === 'string' && sourceFallback.trim()) return getRedditVideoProxyUrl(sourceFallback);
             // <video> prefers direct mp4. Keep dash/hls as last-resort fallback values.
-            if (typeof sourceDash === 'string' && sourceDash.trim()) return sourceDash;
-            if (typeof sourceHls === 'string' && sourceHls.trim()) return sourceHls;
+            if (typeof sourceDash === 'string' && sourceDash.trim()) return getRedditVideoProxyUrl(sourceDash);
+            if (typeof sourceHls === 'string' && sourceHls.trim()) return getRedditVideoProxyUrl(sourceHls);
         }
-        return typeof url === 'string' ? url.replace(/&amp;/g, '&') : url;
+        const cleaned = typeof url === 'string' ? url.replace(/&amp;/g, '&') : url;
+        if (currentVideo?.platform === 'reddit' && typeof cleaned === 'string' && cleaned.includes('v.redd.it')) {
+            return getRedditVideoProxyUrl(cleaned);
+        }
+        return cleaned;
     }, [currentVideo]);
     
 

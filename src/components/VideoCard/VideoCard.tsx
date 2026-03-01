@@ -4,8 +4,9 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import ThumbUpIcon from '@mui/icons-material/ThumbUp';
 import MovieIcon from '@mui/icons-material/Movie';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import RedditIcon from '@mui/icons-material/Reddit';
 import { Video } from '../../types/Video';
+import { getRedditThumbnailProxyUrl } from '../../services/api';
 
 interface VideoCardProps {
     video: Video;
@@ -19,16 +20,18 @@ interface VideoCardProps {
 
 // Simple styled components for VideoCard
 const StyledCard = styled(Card)(({ theme }) => ({
+    width: '100%',
     height: '100%',
     display: 'flex',
     flexDirection: 'column',
-    backgroundColor: 'rgba(18, 18, 18, 0.6)',
-    borderRadius: '8px',
+    backgroundColor: '#181818',
+    borderRadius: '12px',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
     overflow: 'hidden',
     transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
     '&:hover': {
-        transform: 'translateY(-4px)',
-        boxShadow: '0 6px 12px rgba(0, 0, 0, 0.3)'
+        transform: 'translateY(-2px)',
+        boxShadow: '0 10px 20px rgba(0, 0, 0, 0.35)'
     },
     // Mobile TikTok-like styling
     [theme.breakpoints.down('sm')]: {
@@ -64,7 +67,7 @@ const PlayOverlay = styled(Box)(({ theme }) => ({
     },
 }));
 
-const ThumbnailOverlay = styled(Box)(({ theme }) => ({
+const ThumbnailOverlay = styled(Box)(() => ({
     position: 'absolute',
     left: 0,
     right: 0,
@@ -72,10 +75,10 @@ const ThumbnailOverlay = styled(Box)(({ theme }) => ({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: theme.spacing(0.75, 1),
+    padding: '8px',
     background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.4) 60%, rgba(0,0,0,0) 100%)',
-    [theme.breakpoints.down('sm')]: {
-        padding: theme.spacing(0.5, 0.75),
+    '@media (max-width: 600px)': {
+        padding: '8px',
     },
 }));
 
@@ -87,6 +90,16 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, isFocused = false
     const imageRef = useRef<HTMLImageElement>(null);
     const cardRef = useRef<HTMLDivElement>(null);
     const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const stripControlChars = useCallback((value: string): string => {
+        return Array.from(value)
+            .filter((ch) => {
+                const code = ch.charCodeAt(0);
+                if (code === 9 || code === 10 || code === 13) return true;
+                return code >= 32 && code !== 127;
+            })
+            .join('');
+    }, []);
     
     // Create a fallback thumbnail with the video title
     const createFallbackThumbnail = useCallback((title: string) => {
@@ -104,11 +117,8 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, isFocused = false
                     .replace(/>/g, '&gt;')
                     .replace(/"/g, '&quot;');
                 
-                // Remove control characters (ES5 compatible)
-                shortened = shortened.replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
-                
-                // Remove non-ASCII characters (ES5 compatible approach)
-                sanitizedTitle = shortened.replace(/[^\x00-\x7F]/g, '');
+                // Keep multilingual characters; only remove control chars that can break SVG.
+                sanitizedTitle = stripControlChars(shortened).trim() || 'No Title';
             }
                 
             // Create a data URL for an SVG with the title text
@@ -126,7 +136,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, isFocused = false
             // Return a simple colored rectangle if encoding fails
             return 'data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22640%22%20height%3D%22360%22%3E%3Crect%20width%3D%22100%25%22%20height%3D%22100%25%22%20fill%3D%22%23121212%22%2F%3E%3C%2Fsvg%3E';
         }
-    }, []);
+    }, [stripControlChars]);
     
     const tryNextThumbnail = useCallback((urls: string[], index: number) => {
         if (index >= urls.length) {
@@ -198,10 +208,12 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, isFocused = false
                         img.crossOrigin = 'anonymous';
                         img.src = thumbnailUrl;
                     } else if (/^https?:\/\//i.test(video.thumbnailUrl)) {
-                        const remoteUrl = video.thumbnailUrl;
+                        const remoteUrl = (video.thumbnailUrl || '').replace(/&amp;/g, '&');
+                        const proxiedThumbnailUrl =
+                            video.platform === 'reddit' ? getRedditThumbnailProxyUrl(remoteUrl) : remoteUrl;
                         const img = new Image();
                         img.onload = () => {
-                            setThumbnailUrl(remoteUrl);
+                            setThumbnailUrl(proxiedThumbnailUrl);
                             setImageLoading(false);
                         };
                         img.onerror = () => {
@@ -210,7 +222,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, isFocused = false
                             setImageLoading(false);
                         };
                         img.crossOrigin = 'anonymous';
-                        img.src = remoteUrl;
+                        img.src = proxiedThumbnailUrl;
                     } else {
                         // If no valid thumbnail URL, use SVG fallback
                         const fallbackThumbnail = createFallbackThumbnail(video.title);
@@ -243,7 +255,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, isFocused = false
                 retryTimeoutRef.current = null;
             }
         };
-    }, [video.thumbnailUrl, video.title, video.redditId, video.metadata, tryNextThumbnail, createFallbackThumbnail]);
+    }, [video.thumbnailUrl, video.title, video.redditId, video.metadata, video.platform, tryNextThumbnail, createFallbackThumbnail]);
     
     const handleImageError = () => {
         // If we haven't reached max retries, try again
@@ -293,12 +305,12 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, isFocused = false
                 onMouseLeave={() => {
                     if (isLargeDevice) onHoverEnd?.();
                 }}
-                sx={{ position: 'relative' }}
+                sx={{ position: 'relative', width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}
             >
                 {/* Single container for both skeleton and image to ensure consistent sizing */}
                 <Box sx={{
                     position: 'relative',
-                    paddingTop: { xs: '177.78%', sm: '177.78%' }, // 9:16 aspect ratio like YouTube Shorts
+                    paddingTop: { xs: '177.78%', md: '56.25%' }, // mobile shorts, desktop 16:9 like YouTube
                     overflow: 'hidden',
                     // Mobile: full height
                     '@media (max-width: 600px)': {
@@ -472,11 +484,11 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, isFocused = false
                         </Box>
                     </Box>
                     
-                    {/* Platform indicator */}
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <ArrowUpwardIcon sx={{ 
-                            fontSize: { xs: 14, sm: 16 }, 
-                            color: 'white',
+                        {/* Platform indicator */}
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <RedditIcon sx={{ 
+                            fontSize: 14, 
+                            color: '#ff4500',
                             mr: 0.5,
                             opacity: 0.9
                         }} />
@@ -488,18 +500,17 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, isFocused = false
                                 color: 'white',
                                 fontWeight: 500,
                                 cursor: 'pointer',
-                                textDecoration: 'underline',
-                                textUnderlineOffset: '2px'
+                                textDecoration: 'none',
                             }}
                         >
-                            r/{video.subreddit}
+                            Reddit
                         </Typography>
                     </Box>
                 </ThumbnailOverlay>
             </CardActionArea>
             
             <CardContent sx={{ 
-                p: 1, 
+                p: 1,
                 '&:last-child': { pb: 1 },
                 // Mobile: minimal content area
                 '@media (max-width: 600px)': {
@@ -510,24 +521,18 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, isFocused = false
             }}>
                 <Typography 
                     variant="body2" 
-                    component="div" 
                     sx={{ 
-                        fontSize: { xs: '0.7rem', sm: '0.8rem' }, 
-                        fontWeight: 500,
-                        lineHeight: 1.2,
-                        m: 0,
+                        color: 'rgba(255, 255, 255, 0.7)',
+                        fontSize: '0.875rem',
                         display: '-webkit-box',
-                        WebkitLineClamp: 1,
+                        WebkitLineClamp: 2,
                         WebkitBoxOrient: 'vertical',
                         overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        height: { xs: '1.2em', sm: '1.2em' },
-                        color: 'white'
+                        lineHeight: 1.35,
                     }}
                 >
                     {video.title}
                 </Typography>
-                {/* Content area now only shows title since stats are on thumbnail overlay */}
             </CardContent>
         </StyledCard>
     );

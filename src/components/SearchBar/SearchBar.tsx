@@ -11,14 +11,14 @@ const StyledPaper = styled(Paper)(({ theme }) => ({
   maxWidth: '100%',
   margin: '0 auto',
   padding: theme.spacing(0, 0.5),
-  background: 'rgba(19, 19, 47, 0.6)',
+  background: '#121212',
   backdropFilter: 'blur(10px)',
-  border: '1px solid rgba(108, 99, 255, 0.1)',
+  border: '1px solid rgba(255, 255, 255, 0.16)',
   borderRadius: '18px',
   transition: 'all 0.2s ease-in-out',
   '&:hover, &:focus-within': {
-    background: 'rgba(19, 19, 47, 0.8)',
-    boxShadow: '0 4px 12px rgba(108, 99, 255, 0.2)',
+    background: '#1a1a1a',
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.35)',
   },
   [theme.breakpoints.down('sm')]: {
     height: '32px',
@@ -138,14 +138,14 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, mobileView = false, onS
           sx={{ 
             ml: 1,
             p: { xs: '4px', sm: '6px' },
-            backgroundColor: 'rgba(19, 19, 47, 0.6)',
+            backgroundColor: '#121212',
             backdropFilter: 'blur(10px)',
-            border: '1px solid rgba(108, 99, 255, 0.1)',
+            border: '1px solid rgba(255, 255, 255, 0.16)',
             borderRadius: '50%',
             minWidth: '32px',
             height: '32px',
             '&:hover': {
-              backgroundColor: 'rgba(19, 19, 47, 0.8)',
+              backgroundColor: '#1a1a1a',
             }
           }}
           aria-label="close search"
@@ -161,13 +161,13 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, mobileView = false, onS
     <IconButton
       onClick={toggleSearch}
       sx={{
-        backgroundColor: 'rgba(19, 19, 47, 0.6)',
+        backgroundColor: '#121212',
         backdropFilter: 'blur(10px)',
-        border: '1px solid rgba(108, 99, 255, 0.1)',
+        border: '1px solid rgba(255, 255, 255, 0.16)',
         borderRadius: '50%',
         p: '6px',
         '&:hover': {
-          backgroundColor: 'rgba(19, 19, 47, 0.8)',
+          backgroundColor: '#1a1a1a',
         }
       }}
     >

@@ -176,38 +176,24 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         const metadata: any = currentVideo?.metadata && typeof currentVideo.metadata === 'object'
             ? currentVideo.metadata
             : {};
-        const sourceFallback = metadata?.redditVideoSources?.fallbackUrl;
-        const sourceDash = metadata?.redditVideoSources?.dashUrl;
-        const sourceHls = metadata?.redditVideoSources?.hlsUrl;
+        const sourceFallback = typeof metadata?.redditVideoSources?.fallbackUrl === 'string'
+            ? metadata.redditVideoSources.fallbackUrl.replace(/&amp;/g, '&')
+            : '';
+        const sourceDash = typeof metadata?.redditVideoSources?.dashUrl === 'string'
+            ? metadata.redditVideoSources.dashUrl.replace(/&amp;/g, '&')
+            : '';
+        const sourceHls = typeof metadata?.redditVideoSources?.hlsUrl === 'string'
+            ? metadata.redditVideoSources.hlsUrl.replace(/&amp;/g, '&')
+            : '';
 
         if (currentVideo?.platform === 'reddit') {
             if (typeof sourceFallback === 'string' && sourceFallback.trim()) return sourceFallback;
+            // <video> prefers direct mp4. Keep dash/hls as last-resort fallback values.
             if (typeof sourceDash === 'string' && sourceDash.trim()) return sourceDash;
             if (typeof sourceHls === 'string' && sourceHls.trim()) return sourceHls;
         }
-
-        if (url) {
-            // Handle Reddit video URLs
-            if (url.includes('v.redd.it')) {
-                // Extract the video ID
-                let videoId = '';
-                if (url.includes('/DASH_')) {
-                    const match = url.match(/v\.redd\.it\/([^/]+)\//i);
-                    if (match && match[1]) videoId = match[1];
-                } else {
-                    const match = url.match(/v\.redd\.it\/([^/?]+)/i);
-                    if (match && match[1]) videoId = match[1];
-                }
-                
-                if (videoId) {
-                    const querySuffix = url.includes('?') ? url.substring(url.indexOf('?')) : '';
-                    const quality = getVideoQuality(videoId);
-                    return `https://v.redd.it/${videoId}/DASH_${quality}.mp4${querySuffix}`;
-                }
-            }
-        }
-        return url;
-    }, [currentVideo, getVideoQuality]);
+        return typeof url === 'string' ? url.replace(/&amp;/g, '&') : url;
+    }, [currentVideo]);
     
 
         // Preload function is now disabled to reduce network usage
@@ -1164,19 +1150,15 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                         onError={(e) => {
                                             setIsBuffering(false);
                                             console.error('Video playback error:', e);
-                                            // Only try one fallback quality to prevent constant switching
+                                            // Avoid forcing synthetic DASH_360 URLs; they fail for many Reddit posts.
+                                            // Keep the exact source URL captured from Reddit metadata.
                                             if (videoRef.current && currentVideo.videoUrl.includes('v.redd.it')) {
-                                                const videoId = currentVideo.videoUrl.match(/v\.redd\.it\/([^/?]+)/i)?.[1];
-                                                if (videoId && videoQuality !== '360') {
-                                                    // Try 360p as a single fallback
-                                                    setVideoQuality('360');
-                                                    const querySuffix = currentVideo.videoUrl.includes('?')
-                                                        ? currentVideo.videoUrl.substring(currentVideo.videoUrl.indexOf('?'))
-                                                        : '';
-                                                    videoRef.current.src = `https://v.redd.it/${videoId}/DASH_360.mp4${querySuffix}`;
+                                                const fallbackSrc = getVideoUrl(currentVideo.videoUrl);
+                                                if (fallbackSrc && videoRef.current.src !== fallbackSrc) {
+                                                    videoRef.current.src = fallbackSrc;
                                                     videoRef.current.load();
                                                     videoRef.current.play().catch(err => {
-                                                        console.error('Fallback quality also failed:', err);
+                                                        console.error('Fallback source also failed:', err);
                                                     });
                                                 }
                                             }

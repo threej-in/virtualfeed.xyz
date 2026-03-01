@@ -15,16 +15,40 @@ export class RedditScraper {
         'sora video'
     ];
 
+    private static decodeRedditUrl(url: string | undefined): string {
+        if (!url || typeof url !== 'string') return '';
+        return url.replace(/&amp;/g, '&').trim();
+    }
+
+    private static getPostRedditVideo(post: Submission): any | null {
+        const asAny = post as any;
+
+        const direct =
+            asAny?.media?.reddit_video ||
+            asAny?.secure_media?.reddit_video;
+        if (direct) return direct;
+
+        const crosspost = asAny?.crosspost_parent_list?.[0];
+        const crosspostVideo =
+            crosspost?.media?.reddit_video ||
+            crosspost?.secure_media?.reddit_video;
+        if (crosspostVideo) return crosspostVideo;
+
+        return null;
+    }
+
     private static getRedditPreviewThumbnail(post: Submission): string | null {
-        const previewUrl = (post as any)?.preview?.images?.[0]?.source?.url;
+        const asAny = post as any;
+        const previewUrl = asAny?.preview?.images?.[0]?.source?.url
+            || asAny?.crosspost_parent_list?.[0]?.preview?.images?.[0]?.source?.url;
         if (typeof previewUrl === 'string' && previewUrl.startsWith('http')) {
             // Reddit returns escaped URLs like "&amp;"
-            return previewUrl.replace(/&amp;/g, '&');
+            return this.decodeRedditUrl(previewUrl);
         }
 
-        const thumb = (post as any)?.thumbnail;
+        const thumb = asAny?.thumbnail || asAny?.crosspost_parent_list?.[0]?.thumbnail;
         if (typeof thumb === 'string' && thumb.startsWith('http')) {
-            return thumb;
+            return this.decodeRedditUrl(thumb);
         }
 
         return null;
@@ -147,21 +171,26 @@ export class RedditScraper {
 
             // Extract the video ID for better handling with Reddit videos
             let videoId = '';
+            let redditVideo: any = null;
             
             // Check for Reddit-hosted videos
-            if (post.is_video && post.media?.reddit_video) {
-                // Try to get the highest quality video URL
-                const videoData = post.media.reddit_video;
+            redditVideo = this.getPostRedditVideo(post);
+            if (post.is_video && redditVideo) {
+                const fallbackUrl = this.decodeRedditUrl(redditVideo?.fallback_url as string | undefined);
+                const dashUrl = this.decodeRedditUrl(redditVideo?.dash_url as string | undefined);
+                const hlsUrl = this.decodeRedditUrl(redditVideo?.hls_url as string | undefined);
                 
-                if (videoData.fallback_url) {
-                    const match = videoData.fallback_url.match(/\/([a-zA-Z0-9]+)\//i);
+                if (fallbackUrl) {
+                    const match = fallbackUrl.match(/\/([a-zA-Z0-9]+)\//i);
                     if (match && match[1]) videoId = match[1];
                 }
                 
-                // Only ingest directly playable MP4 source for Reddit.
-                // dash_url/hls_url are manifest URLs and frequently fail in plain <video>.
-                if (videoData.fallback_url && /\/DASH_\d+\.mp4/i.test(videoData.fallback_url)) {
-                    videoUrl = videoData.fallback_url;
+                // redditp-style: use exact Reddit fallback MP4 URL for playback.
+                if (fallbackUrl && /\/DASH_\d+\.mp4/i.test(fallbackUrl)) {
+                    videoUrl = fallbackUrl;
+                } else if (dashUrl || hlsUrl) {
+                    // Keep dash/hls as metadata-only options; skip ingest when no playable fallback mp4 exists.
+                    videoUrl = '';
                 }
             } 
             // Check for direct video links
@@ -248,10 +277,9 @@ export class RedditScraper {
             let audioUrl = '';
             let redditVideoSources: { fallbackUrl?: string; dashUrl?: string; hlsUrl?: string } | undefined;
             if (videoMetadata.url.includes('v.redd.it')) {
-                const redditVideo = (post.media as any)?.reddit_video;
-                const fallbackUrl = redditVideo?.fallback_url as string | undefined;
-                const dashUrl = redditVideo?.dash_url as string | undefined;
-                const hlsUrl = redditVideo?.hls_url as string | undefined;
+                const fallbackUrl = this.decodeRedditUrl(redditVideo?.fallback_url as string | undefined) || undefined;
+                const dashUrl = this.decodeRedditUrl(redditVideo?.dash_url as string | undefined) || undefined;
+                const hlsUrl = this.decodeRedditUrl(redditVideo?.hls_url as string | undefined) || undefined;
 
                 if (fallbackUrl || dashUrl || hlsUrl) {
                     redditVideoSources = {
@@ -544,11 +572,17 @@ export class RedditScraper {
                     continue;
                 }
 
-                const redditVideo = (post.media as any)?.reddit_video;
-                const fallbackUrl = redditVideo?.fallback_url as string | undefined;
-                const dashUrl = redditVideo?.dash_url as string | undefined;
-                const hlsUrl = redditVideo?.hls_url as string | undefined;
-                const refreshedVideoUrl = fallbackUrl || dashUrl || hlsUrl || video.videoUrl;
+                const redditVideo = this.getPostRedditVideo(post as Submission);
+                const fallbackUrl = this.decodeRedditUrl(redditVideo?.fallback_url as string | undefined) || undefined;
+                const dashUrl = this.decodeRedditUrl(redditVideo?.dash_url as string | undefined) || undefined;
+                const hlsUrl = this.decodeRedditUrl(redditVideo?.hls_url as string | undefined) || undefined;
+                const refreshedVideoUrl = fallbackUrl || video.videoUrl;
+
+                // If we still don't have a playable fallback mp4, blacklist to avoid dead cards.
+                if (!refreshedVideoUrl || !/\/DASH_\d+\.mp4/i.test(refreshedVideoUrl)) {
+                    await video.update({ blacklisted: true });
+                    continue;
+                }
 
                 const querySuffix = refreshedVideoUrl.includes('?')
                     ? refreshedVideoUrl.substring(refreshedVideoUrl.indexOf('?'))

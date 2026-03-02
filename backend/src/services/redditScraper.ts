@@ -49,34 +49,50 @@ export class RedditScraper {
 
     private static buildRedditMp4Candidates(videoId: string, querySuffix: string): string[] {
         if (!videoId) return [];
-        const suffix = querySuffix || '';
-        return [
-            `https://v.redd.it/${videoId}/DASH_1080.mp4${suffix}`,
-            `https://v.redd.it/${videoId}/DASH_720.mp4${suffix}`,
-            `https://v.redd.it/${videoId}/DASH_480.mp4${suffix}`,
-            `https://v.redd.it/${videoId}/DASH_360.mp4${suffix}`,
-            `https://v.redd.it/${videoId}/DASH_240.mp4${suffix}`,
-            `https://v.redd.it/${videoId}/DASH_96.mp4${suffix}`
-        ];
+        const suffixes = querySuffix ? [querySuffix, ''] : [''];
+        const candidates: string[] = [];
+        for (const suffix of suffixes) {
+            candidates.push(
+                `https://v.redd.it/${videoId}/CMAF_720.mp4${suffix}`,
+                `https://v.redd.it/${videoId}/CMAF_480.mp4${suffix}`,
+                `https://v.redd.it/${videoId}/CMAF_360.mp4${suffix}`,
+                `https://v.redd.it/${videoId}/DASH_1080.mp4${suffix}`,
+                `https://v.redd.it/${videoId}/DASH_720.mp4${suffix}`,
+                `https://v.redd.it/${videoId}/DASH_480.mp4${suffix}`,
+                `https://v.redd.it/${videoId}/DASH_360.mp4${suffix}`,
+                `https://v.redd.it/${videoId}/DASH_240.mp4${suffix}`,
+                `https://v.redd.it/${videoId}/DASH_96.mp4${suffix}`
+            );
+        }
+        return Array.from(new Set(candidates));
     }
 
     private static derivePlayableRedditVideoUrl(redditVideo: any): string {
         const fallbackUrl = this.decodeRedditUrl(redditVideo?.fallback_url as string | undefined);
         const dashUrl = this.decodeRedditUrl(redditVideo?.dash_url as string | undefined);
         const hlsUrl = this.decodeRedditUrl(redditVideo?.hls_url as string | undefined);
+        const seedUrl = fallbackUrl || dashUrl || hlsUrl;
+        const videoId = this.getRedditVideoIdFromUrl(seedUrl);
+        const querySuffix = this.getQuerySuffix(seedUrl);
+        const mp4Candidates = this.buildRedditMp4Candidates(videoId, querySuffix);
+
+        // Prefer CMAF MP4 first (redditp/redditpx-style) for stable browser playback.
+        const cmafCandidate = mp4Candidates.find((candidate) => /\/CMAF_\d+\.mp4/i.test(candidate));
+        if (cmafCandidate) {
+            return cmafCandidate;
+        }
+
+        // Prefer adaptive streams first; this is the most reliable playback path.
+        if (dashUrl) {
+            return dashUrl;
+        }
+        if (hlsUrl) {
+            return hlsUrl;
+        }
 
         if (fallbackUrl && /\/DASH_\d+\.mp4/i.test(fallbackUrl)) {
             return fallbackUrl;
         }
-
-        const seedUrl = fallbackUrl || dashUrl || hlsUrl;
-        const videoId = this.getRedditVideoIdFromUrl(seedUrl);
-        if (!videoId) {
-            return '';
-        }
-
-        const querySuffix = this.getQuerySuffix(seedUrl);
-        const mp4Candidates = this.buildRedditMp4Candidates(videoId, querySuffix);
         return mp4Candidates[0] || '';
     }
 
@@ -183,7 +199,7 @@ export class RedditScraper {
             }
             
             // For AI-focused subreddits, we don't need to check for search terms
-            const aiSubreddits = ['StableDiffusion', 'midjourney', 'sdforall', 'aivideo', 'AIGeneratedContent', 'aiArt', 'chatgpttoolbox', 'aiart', 'artificial', 'machinelearning'];
+            const aiSubreddits = ['StableDiffusion', 'midjourney', 'sdforall', 'aivideo', 'aivideos', 'aihub', 'AIGeneratedContent', 'aiArt', 'chatgpttoolbox', 'aiart', 'artificial', 'machinelearning'];
             const isAIFocusedSubreddit = aiSubreddits.includes(post.subreddit.display_name);
             
             // Check for required search terms (only for non-AI-focused subreddits)
@@ -374,7 +390,7 @@ export class RedditScraper {
                     };
                 }
                 if (videoIdFromSources) {
-                    audioUrl = `https://v.redd.it/${videoIdFromSources}/DASH_AUDIO_128.mp4${querySuffix}`;
+                    audioUrl = `https://v.redd.it/${videoIdFromSources}/CMAF_AUDIO_128.mp4${querySuffix}`;
                 }
             }
             
@@ -652,8 +668,8 @@ export class RedditScraper {
                 const refreshedVideoUrl = this.derivePlayableRedditVideoUrl(redditVideo) || video.videoUrl;
                 const refreshedThumbnailUrl = this.getRedditPreviewThumbnail(post as Submission) || video.thumbnailUrl;
 
-                // If we still don't have a playable fallback mp4, blacklist to avoid dead cards.
-                if (!refreshedVideoUrl || !/\/DASH_\d+\.mp4/i.test(refreshedVideoUrl)) {
+                // If we still don't have any playable stream URL, blacklist to avoid dead cards.
+                if (!refreshedVideoUrl) {
                     await video.update({ blacklisted: true });
                     continue;
                 }
@@ -664,7 +680,7 @@ export class RedditScraper {
 
                 const match = refreshedVideoUrl.match(/v\.redd\.it\/([^/?]+)/i);
                 const refreshedAudioUrl = match?.[1]
-                    ? `https://v.redd.it/${match[1]}/DASH_AUDIO_128.mp4${querySuffix}`
+                    ? `https://v.redd.it/${match[1]}/CMAF_AUDIO_128.mp4${querySuffix}`
                     : metadata?.audioUrl || '';
                 const refreshedCandidates = match?.[1]
                     ? this.buildRedditMp4Candidates(match[1], querySuffix)

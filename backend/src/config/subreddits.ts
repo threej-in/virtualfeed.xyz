@@ -31,6 +31,18 @@ export const subreddits: SubredditConfig[] = [
         searchTerms: []  // No search terms required for AI-focused subreddits
     },
     {
+        name: 'aivideos',
+        minScore: 1,
+        excludeTerms: [],
+        searchTerms: []  // No search terms required for AI-focused subreddits
+    },
+    {
+        name: 'aihub',
+        minScore: 1,
+        excludeTerms: [],
+        searchTerms: []  // No search terms required for AI-focused subreddits
+    },
+    {
         name: 'AIGeneratedContent',  // Added new AI-focused subreddit
         minScore: 1,
         excludeTerms: [],

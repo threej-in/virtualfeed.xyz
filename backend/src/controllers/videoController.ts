@@ -57,24 +57,33 @@ const buildRedditVideoCandidates = (url: string): string[] => {
     const match = normalizedUrl.match(/https?:\/\/v\.redd\.it\/([^/?]+)/i);
     const videoId = match?.[1];
     const querySuffix = getRedditQuerySuffix(normalizedUrl);
+    const suffixes = querySuffix ? [querySuffix, ''] : [''];
 
     if (!videoId) {
-        return [normalizedUrl];
+        const withoutQuery = normalizedUrl.split('?')[0];
+        return Array.from(new Set([normalizedUrl, withoutQuery].filter(Boolean)));
     }
 
-    const variants = [
-        `https://v.redd.it/${videoId}/DASH_1080.mp4${querySuffix}`,
-        `https://v.redd.it/${videoId}/DASH_720.mp4${querySuffix}`,
-        `https://v.redd.it/${videoId}/DASH_480.mp4${querySuffix}`,
-        `https://v.redd.it/${videoId}/DASH_360.mp4${querySuffix}`,
-        `https://v.redd.it/${videoId}/DASH_240.mp4${querySuffix}`,
-        `https://v.redd.it/${videoId}/DASH_96.mp4${querySuffix}`
-    ];
+    const variants: string[] = [];
+    for (const suffix of suffixes) {
+        variants.push(
+            `https://v.redd.it/${videoId}/CMAF_720.mp4${suffix}`,
+            `https://v.redd.it/${videoId}/CMAF_480.mp4${suffix}`,
+            `https://v.redd.it/${videoId}/CMAF_360.mp4${suffix}`,
+            `https://v.redd.it/${videoId}/DASH_1080.mp4${suffix}`,
+            `https://v.redd.it/${videoId}/DASH_720.mp4${suffix}`,
+            `https://v.redd.it/${videoId}/DASH_480.mp4${suffix}`,
+            `https://v.redd.it/${videoId}/DASH_360.mp4${suffix}`,
+            `https://v.redd.it/${videoId}/DASH_240.mp4${suffix}`,
+            `https://v.redd.it/${videoId}/DASH_96.mp4${suffix}`
+        );
+    }
 
     const isMp4Source = /\.mp4(\?|$)/i.test(normalizedUrl);
+    const normalizedWithoutQuery = normalizedUrl.split('?')[0];
     const ordered = isMp4Source
-        ? [normalizedUrl, ...variants]
-        : [...variants, normalizedUrl];
+        ? [normalizedUrl, normalizedWithoutQuery, ...variants]
+        : [...variants, normalizedUrl, normalizedWithoutQuery];
 
     const candidates: string[] = [];
     const seen = new Set<string>();
@@ -141,18 +150,28 @@ const buildRedditAudioCandidates = (url: string): string[] => {
     const match = url.match(/https?:\/\/v\.redd\.it\/([^/?]+)\//i);
     const videoId = match?.[1];
     const querySuffix = url.includes('?') ? url.substring(url.indexOf('?')) : '';
+    const suffixes = querySuffix ? [querySuffix, ''] : [''];
 
     if (!videoId) {
+        const withoutQuery = url.split('?')[0];
+        if (withoutQuery && !candidates.includes(withoutQuery)) {
+            candidates.push(withoutQuery);
+        }
         return candidates;
     }
 
-    const variants = [
-        `https://v.redd.it/${videoId}/DASH_AUDIO_128.mp4${querySuffix}`,
-        `https://v.redd.it/${videoId}/DASH_audio.mp4${querySuffix}`,
-        `https://v.redd.it/${videoId}/DASH_AUDIO_64.mp4${querySuffix}`,
-        `https://v.redd.it/${videoId}/audio${querySuffix}`,
-        `https://v.redd.it/${videoId}/audio.mp4${querySuffix}`
-    ];
+    const variants: string[] = [];
+    for (const suffix of suffixes) {
+        variants.push(
+            `https://v.redd.it/${videoId}/CMAF_AUDIO_128.mp4${suffix}`,
+            `https://v.redd.it/${videoId}/CMAF_AUDIO_64.mp4${suffix}`,
+            `https://v.redd.it/${videoId}/DASH_AUDIO_128.mp4${suffix}`,
+            `https://v.redd.it/${videoId}/DASH_audio.mp4${suffix}`,
+            `https://v.redd.it/${videoId}/DASH_AUDIO_64.mp4${suffix}`,
+            `https://v.redd.it/${videoId}/audio${suffix}`,
+            `https://v.redd.it/${videoId}/audio.mp4${suffix}`
+        );
+    }
 
     for (const variant of variants) {
         if (!candidates.includes(variant)) {

@@ -26,24 +26,6 @@ const StyledPaper = styled(Paper)(({ theme }) => ({
   },
 }));
 
-const StyledInputBase = styled(InputBase)(({ theme }) => ({
-  flex: 1,
-  marginLeft: theme.spacing(0.5),
-  '& input': {
-    color: theme.palette.text.primary,
-    fontSize: '0.875rem',
-    padding: theme.spacing(0.5, 0),
-    '&::placeholder': {
-      color: theme.palette.text.secondary,
-      opacity: 0.7,
-    },
-    [theme.breakpoints.down('sm')]: {
-      fontSize: '0.8rem',
-      padding: theme.spacing(0.25, 0),
-    },
-  },
-}));
-
 interface SearchBarProps {
   onSearch: (query: string) => void;
   mobileView?: boolean;

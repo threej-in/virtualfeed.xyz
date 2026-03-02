@@ -4,22 +4,17 @@ import {
   CardContent,
   CardMedia,
   Typography,
-  Chip,
   Box,
-  IconButton,
-  Tooltip,
   Skeleton,
   CircularProgress,
 } from '@mui/material';
 import {
   PlayArrow as PlayIcon,
-  YouTube as YouTubeIcon,
   Visibility as ViewIcon,
   ThumbUp as LikeIcon,
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
 import { Video } from '../../types/Video';
-import { getVideoTags, getVideoTagsSlice, getVideoTagsCount } from '../../utils/videoUtils';
 
 interface YouTubeVideoCardProps {
   video: Video;
@@ -53,10 +48,6 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
   const handleImageError = () => {
     setImageError(true);
     setImageLoaded(true);
-  };
-
-  const handleVideoLoadStart = () => {
-    setVideoLoading(true);
   };
 
   const handleVideoLoad = () => {

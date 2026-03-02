@@ -32,6 +32,24 @@ const staticOptions = {
     res.set('X-Content-Type-Options', 'nosniff');
   },
 };
+const thumbnailStaticOptions = {
+  ...staticOptions,
+  fallthrough: false,
+};
+
+// Serve thumbnails with strict 404 behavior so missing files don't resolve to index.html.
+app.use('/thumbnails', express.static(path.join(__dirname, '../public', 'thumbnails'), thumbnailStaticOptions));
+app.use((err: unknown, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const originalUrl = typeof req.originalUrl === 'string' ? req.originalUrl : '';
+  if (originalUrl.startsWith('/thumbnails/')) {
+    const maybeError = err as { status?: number; code?: string };
+    if (maybeError?.status === 404 || maybeError?.code === 'ENOENT') {
+      res.status(404).set('Cache-Control', 'no-store').end();
+      return;
+    }
+  }
+  next(err);
+});
 
 // Serve static assets from public directory (legacy assets)
 app.use(express.static(path.join(__dirname, '../public'), staticOptions));

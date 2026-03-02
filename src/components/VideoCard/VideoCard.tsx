@@ -6,7 +6,7 @@ import MovieIcon from '@mui/icons-material/Movie';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import RedditIcon from '@mui/icons-material/Reddit';
 import { Video } from '../../types/Video';
-import { getRedditThumbnailProxyUrl } from '../../services/api';
+import { getBackendAssetUrl, getRedditThumbnailProxyUrl } from '../../services/api';
 
 interface VideoCardProps {
     video: Video;
@@ -168,7 +168,10 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, isFocused = false
                 // Only load the image when the card is visible
                 if (video.thumbnailUrl) {
                     // Try to load the thumbnail from different sources
-                    const apiBaseUrl = process.env.REACT_APP_API_BASE_URL || '';
+                    const extractRedditVideoId = (rawUrl?: string): string => {
+                        if (!rawUrl || typeof rawUrl !== 'string') return '';
+                        return rawUrl.match(/v\.redd\.it\/([^/?]+)/i)?.[1] || '';
+                    };
                     
                     // Prefer local thumbnails, but allow absolute remote URLs (e.g. Reddit preview images).
                     if (video.thumbnailUrl && video.thumbnailUrl.startsWith('/thumbnails/')) {
@@ -176,53 +179,50 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, isFocused = false
                         const thumbnailPath = video.thumbnailUrl.endsWith('.jpg') 
                             ? video.thumbnailUrl 
                             : `${video.thumbnailUrl}.jpg`;
-                        
-                        // Direct path to the thumbnail in the public directory
-                        // The server is configured to serve files from the public directory directly
-                        const thumbnailUrl = `${thumbnailPath}`;
-                        
-                        const img = new Image();
-                        img.onload = () => {
-                            setThumbnailUrl(thumbnailUrl);
-                            setImageLoading(false);
-                        };
-                        img.onerror = (e) => {
-                            // Try one more time with apiBaseUrl prefix
-                            const fallbackUrl = `${apiBaseUrl}${thumbnailPath}`;
-                            
-                            const fallbackImg = new Image();
-                            fallbackImg.onload = () => {
-                                setThumbnailUrl(fallbackUrl);
-                                setImageLoading(false);
-                            };
-                            fallbackImg.onerror = () => {
-                                // Create fallback with title as last resort
-                                console.error(`Both thumbnail URLs failed to load for: ${video.title}`);
-                                const svgFallback = createFallbackThumbnail(video.title);
-                                setThumbnailUrl(svgFallback);
-                                setImageLoading(false);
-                            };
-                            fallbackImg.crossOrigin = 'anonymous';
-                            fallbackImg.src = fallbackUrl;
-                        };
-                        img.crossOrigin = 'anonymous';
-                        img.src = thumbnailUrl;
+                        const absoluteThumbnailUrl = getBackendAssetUrl(thumbnailPath);
+                        const fallbackUrls = [absoluteThumbnailUrl, thumbnailPath];
+
+                        if (video.platform === 'reddit') {
+                            const redditVideoId = extractRedditVideoId(video.videoUrl);
+                            if (redditVideoId) {
+                                fallbackUrls.push(
+                                    getRedditThumbnailProxyUrl(`https://i.redd.it/${redditVideoId}.jpg`)
+                                );
+                            }
+                        }
+
+                        tryNextThumbnail(Array.from(new Set(fallbackUrls)), 0);
                     } else if (/^https?:\/\//i.test(video.thumbnailUrl)) {
                         const remoteUrl = (video.thumbnailUrl || '').replace(/&amp;/g, '&');
-                        const proxiedThumbnailUrl =
-                            video.platform === 'reddit' ? getRedditThumbnailProxyUrl(remoteUrl) : remoteUrl;
                         const img = new Image();
                         img.onload = () => {
-                            setThumbnailUrl(proxiedThumbnailUrl);
+                            setThumbnailUrl(remoteUrl);
                             setImageLoading(false);
                         };
                         img.onerror = () => {
-                            const fallbackThumbnail = createFallbackThumbnail(video.title);
-                            setThumbnailUrl(fallbackThumbnail);
-                            setImageLoading(false);
+                            if (video.platform !== 'reddit') {
+                                const fallbackThumbnail = createFallbackThumbnail(video.title);
+                                setThumbnailUrl(fallbackThumbnail);
+                                setImageLoading(false);
+                                return;
+                            }
+
+                            const proxiedThumbnailUrl = getRedditThumbnailProxyUrl(remoteUrl);
+                            const proxiedImg = new Image();
+                            proxiedImg.onload = () => {
+                                setThumbnailUrl(proxiedThumbnailUrl);
+                                setImageLoading(false);
+                            };
+                            proxiedImg.onerror = () => {
+                                const fallbackThumbnail = createFallbackThumbnail(video.title);
+                                setThumbnailUrl(fallbackThumbnail);
+                                setImageLoading(false);
+                            };
+                            proxiedImg.crossOrigin = 'anonymous';
+                            proxiedImg.src = proxiedThumbnailUrl;
                         };
                         img.crossOrigin = 'anonymous';
-                        img.src = proxiedThumbnailUrl;
+                        img.src = remoteUrl;
                     } else {
                         // If no valid thumbnail URL, use SVG fallback
                         const fallbackThumbnail = createFallbackThumbnail(video.title);
@@ -255,7 +255,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, isFocused = false
                 retryTimeoutRef.current = null;
             }
         };
-    }, [video.thumbnailUrl, video.title, video.redditId, video.metadata, video.platform, tryNextThumbnail, createFallbackThumbnail]);
+    }, [video.thumbnailUrl, video.title, video.redditId, video.metadata, video.platform, video.videoUrl, tryNextThumbnail, createFallbackThumbnail]);
     
     const handleImageError = () => {
         // If we haven't reached max retries, try again
@@ -305,11 +305,20 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, isFocused = false
                 onMouseLeave={() => {
                     if (isLargeDevice) onHoverEnd?.();
                 }}
-                sx={{ position: 'relative', width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}
+                sx={{
+                    position: 'relative',
+                    width: '100%',
+                    height: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'stretch',
+                    justifyContent: 'flex-start'
+                }}
             >
                 {/* Single container for both skeleton and image to ensure consistent sizing */}
                 <Box sx={{
                     position: 'relative',
+                    width: '100%',
                     paddingTop: { xs: '177.78%', md: '56.25%' }, // mobile shorts, desktop 16:9 like YouTube
                     overflow: 'hidden',
                     // Mobile: full height

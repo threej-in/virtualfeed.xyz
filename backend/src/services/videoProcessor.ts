@@ -16,6 +16,34 @@ interface VideoMetadata {
 
 export class VideoProcessor {
     private static readonly REMOTE_FALLBACK_THUMBNAIL = 'https://via.placeholder.com/400x720/1a1a1a/ffffff?text=Video';
+    private static buildRedditThumbnailCandidates(videoUrl: string): string[] {
+        const normalized = (videoUrl || '').replace(/&amp;/g, '&').trim();
+        const match = normalized.match(/v\.redd\.it\/([^/?]+)/i);
+        const videoId = match?.[1];
+        if (!videoId) {
+            const withoutQuery = normalized.split('?')[0];
+            return Array.from(new Set([normalized, withoutQuery].filter(Boolean)));
+        }
+
+        const existingQuery = normalized.includes('?') ? normalized.substring(normalized.indexOf('?')) : '';
+        const querySuffix = existingQuery || '?source=fallback';
+        const suffixes = Array.from(new Set([querySuffix, '']));
+        const candidates: string[] = [normalized, normalized.split('?')[0]];
+
+        for (const suffix of suffixes) {
+            candidates.push(
+                `https://v.redd.it/${videoId}/CMAF_720.mp4${suffix}`,
+                `https://v.redd.it/${videoId}/CMAF_480.mp4${suffix}`,
+                `https://v.redd.it/${videoId}/CMAF_360.mp4${suffix}`,
+                `https://v.redd.it/${videoId}/DASH_720.mp4${suffix}`,
+                `https://v.redd.it/${videoId}/DASH_480.mp4${suffix}`,
+                `https://v.redd.it/${videoId}/DASH_360.mp4${suffix}`
+            );
+        }
+
+        return Array.from(new Set(candidates.filter(Boolean)));
+    }
+
     static async validateVideo(url: string): Promise<VideoMetadata | null> {
         try {
             // Special handling for Reddit DASH/HLS videos
@@ -113,9 +141,16 @@ export class VideoProcessor {
                 return thumbnailUrl;
             }
             
-            // Handle Reddit videos specially.
-            // Reddit often blocks direct ffmpeg fetches with 403; prefer a known fallback thumbnail.
             if (videoUrl.includes('v.redd.it')) {
+                const redditCandidates = this.buildRedditThumbnailCandidates(videoUrl);
+                for (const candidateUrl of redditCandidates) {
+                    try {
+                        await this.generateThumbnailWithFFmpeg(candidateUrl, thumbnailPath);
+                        return thumbnailUrl;
+                    } catch (error) {
+                        // Try the next candidate URL.
+                    }
+                }
                 return this.createDefaultThumbnail(thumbnailPath, thumbnailUrl);
             }
             

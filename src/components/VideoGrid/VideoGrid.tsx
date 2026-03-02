@@ -26,9 +26,10 @@ const VideoGrid: React.FC<VideoGridProps> = ({ videos, onVideoClick, lastVideoRe
 
     // Cleanup observers when videos change
     useEffect(() => {
+        const observer = videoFocusObserver?.current;
         return () => {
-            if (videoFocusObserver?.current) {
-                videoFocusObserver.current.disconnect();
+            if (observer) {
+                observer.disconnect();
             }
         };
     }, [videos, videoFocusObserver]);

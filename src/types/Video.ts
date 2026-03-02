@@ -26,6 +26,7 @@ export interface Video {
             fallbackUrl?: string;
             dashUrl?: string;
             hlsUrl?: string;
+            mp4Candidates?: string[];
         };
         platform?: string;
         youtubeId?: string;

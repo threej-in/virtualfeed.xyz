@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import {
     Dialog,
     IconButton,
@@ -30,8 +30,10 @@ import {
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSwipeable } from 'react-swipeable';
+import dashjs from 'dashjs';
+import Hls from 'hls.js';
 import { Video } from '../../types/Video';
-import { updateVideoStats, getRedditAudioProxyUrl, getRedditVideoProxyUrl, likeVideoInternal } from '../../services/api';
+import { updateVideoStats, getRedditAudioProxyUrl, likeVideoInternal } from '../../services/api';
 
 interface VideoPlayerProps {
     videos: Video[];
@@ -40,6 +42,27 @@ interface VideoPlayerProps {
     onClose: () => void;
     onTagClick?: (tag: string) => void;
 }
+
+type RedditPlaybackType = 'mp4' | 'dash' | 'hls';
+
+interface ResolvedPlaybackSource {
+    url: string;
+    type: RedditPlaybackType;
+    isReddit: boolean;
+    requiresExternalAudio: boolean;
+    mp4FallbackUrl?: string;
+}
+
+const isPlayInterruptedError = (error: unknown): boolean => {
+    if (!error || typeof error !== 'object') return false;
+    const maybeError = error as { name?: string; message?: string };
+    const message = (maybeError.message || '').toLowerCase();
+    return (
+        maybeError.name === 'AbortError' ||
+        message.includes('play() request was interrupted') ||
+        message.includes('interrupted by a call to pause')
+    );
+};
 
 const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, open, onClose, onTagClick }) => {
     const theme = useTheme();
@@ -65,16 +88,20 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
     const [isAudioReady, setIsAudioReady] = useState(false);
     const [internalLikeCount, setInternalLikeCount] = useState(0);
     const [hasLikedCurrent, setHasLikedCurrent] = useState(false);
+    const [playbackOverride, setPlaybackOverride] = useState<ResolvedPlaybackSource | null>(null);
     // const [isInitialLoading, setIsInitialLoading] = useState(true);
     // const [networkSpeed, setNetworkSpeed] = useState<number | null>(null); // Kept for compatibility
     
     const videoRef = useRef<HTMLVideoElement>(null);
     const audioRef = useRef<HTMLAudioElement>(null);
+    const dashPlayerRef = useRef<dashjs.MediaPlayerClass | null>(null);
+    const hlsPlayerRef = useRef<Hls | null>(null);
     const youtubeIframeRef = useRef<HTMLIFrameElement>(null);
     const nextVideoPreloadRef = useRef<HTMLVideoElement>(null);
     const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastAudioSyncAtRef = useRef<number>(0);
     const loadStartTimeRef = useRef<number>(0);
+    const isMutedRef = useRef<boolean>(isMuted);
     const [nextYouTubeEmbedUrl, setNextYouTubeEmbedUrl] = useState('');
     // const nextVideoRef = useRef<HTMLVideoElement | null>(null);
     
@@ -82,6 +109,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
     useEffect(() => {
         if (initialVideoIndex >= 0 && initialVideoIndex < videos.length) {
             setCurrentIndex(initialVideoIndex);
+            setPlaybackOverride(null);
             // Reset loading states when video changes
             const currentVideo = videos[initialVideoIndex];
             if (currentVideo?.platform === 'youtube') {
@@ -93,6 +121,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
     }, [initialVideoIndex, videos]);
     
     const currentVideo = videos[currentIndex];
+
+    useEffect(() => {
+        setPlaybackOverride(null);
+    }, [currentVideo?.id]);
 
     useEffect(() => {
         if (open && currentVideo) {
@@ -127,26 +159,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
     }, [currentVideo]);
 
     useEffect(() => {
-        if (!currentVideo) {
-            return;
-        }
+        isMutedRef.current = isMuted;
+    }, [isMuted]);
 
-        if (currentVideo.platform === 'youtube') {
-            setHasAudioTrack(true);
-            setIsAudioReady(true);
-        }
-    }, [currentVideo]);
-    
     // Measure network speed when loading video (simplified)
     const measureNetworkSpeed = useCallback(() => {
         // Simplified network speed measurement to avoid quality switching
     }, []);
-
-        // Get appropriate video quality based on network conditions
-    const getVideoQuality = useCallback((videoId: string): string => {
-        // Use the selected quality directly for stability
-        return videoQuality;
-    }, [videoQuality]);
 
     // Get YouTube embed URL
     const getYouTubeEmbedUrl = useCallback((video: Video) => {
@@ -171,25 +190,60 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         return '';
     }, [isSmallDevice]);
 
-    // Get video URL for Reddit videos with multiple formats
-    const getVideoUrl = useCallback((url: string) => {
-        const metadata: any = currentVideo?.metadata && typeof currentVideo.metadata === 'object'
-            ? currentVideo.metadata
-            : {};
+    const parseVideoMetadata = useCallback((video: Video | undefined): any => {
+        if (!video) return {};
+        if (video.metadata && typeof video.metadata === 'object') {
+            return video.metadata;
+        }
+        if (typeof video.metadata === 'string') {
+            try {
+                return JSON.parse(video.metadata);
+            } catch {
+                return {};
+            }
+        }
+        return {};
+    }, []);
+
+    const resolvePlaybackSource = useCallback((video: Video | undefined): ResolvedPlaybackSource => {
+        if (!video) {
+            return { url: '', type: 'mp4', isReddit: false, requiresExternalAudio: false, mp4FallbackUrl: '' };
+        }
+
         const cleanup = (value: string) => value.replace(/&amp;/g, '&').trim();
+        const isDashUrl = (value: string) => /\.mpd(\?|$)/i.test(value) || /DASHPlaylist\.mpd/i.test(value);
+        const isHlsUrl = (value: string) => /\.m3u8(\?|$)/i.test(value) || /HLSPlaylist\.m3u8/i.test(value);
+        const isMp4Url = (value: string) => /\.mp4(\?|$)/i.test(value) || /\/DASH_\d+\.mp4(\?|$)/i.test(value);
+        const isCmafUrl = (value: string) => /\/CMAF(_\d+)?\.mp4(\?|$)/i.test(value);
         const getVideoId = (value: string) => value.match(/v\.redd\.it\/([^/?]+)/i)?.[1] || '';
         const getQuerySuffix = (value: string) => (value.includes('?') ? value.substring(value.indexOf('?')) : '');
         const buildMp4Candidates = (videoId: string, querySuffix: string): string[] => {
             if (!videoId) return [];
-            return [
-                `https://v.redd.it/${videoId}/DASH_1080.mp4${querySuffix}`,
-                `https://v.redd.it/${videoId}/DASH_720.mp4${querySuffix}`,
-                `https://v.redd.it/${videoId}/DASH_480.mp4${querySuffix}`,
-                `https://v.redd.it/${videoId}/DASH_360.mp4${querySuffix}`,
-                `https://v.redd.it/${videoId}/DASH_240.mp4${querySuffix}`,
-                `https://v.redd.it/${videoId}/DASH_96.mp4${querySuffix}`
-            ];
+            const suffixes = querySuffix ? [querySuffix, ''] : [''];
+            const candidates: string[] = [];
+            for (const suffix of suffixes) {
+                candidates.push(
+                    `https://v.redd.it/${videoId}/CMAF_720.mp4${suffix}`,
+                    `https://v.redd.it/${videoId}/CMAF_480.mp4${suffix}`,
+                    `https://v.redd.it/${videoId}/CMAF_360.mp4${suffix}`,
+                    `https://v.redd.it/${videoId}/DASH_1080.mp4${suffix}`,
+                    `https://v.redd.it/${videoId}/DASH_720.mp4${suffix}`,
+                    `https://v.redd.it/${videoId}/DASH_480.mp4${suffix}`,
+                    `https://v.redd.it/${videoId}/DASH_360.mp4${suffix}`,
+                    `https://v.redd.it/${videoId}/DASH_240.mp4${suffix}`,
+                    `https://v.redd.it/${videoId}/DASH_96.mp4${suffix}`
+                );
+            }
+            return Array.from(new Set(candidates));
         };
+
+        const cleanedVideoUrl = typeof video.videoUrl === 'string' ? cleanup(video.videoUrl) : '';
+
+        if (video.platform !== 'reddit') {
+            return { url: cleanedVideoUrl, type: 'mp4', isReddit: false, requiresExternalAudio: false };
+        }
+
+        const metadata = parseVideoMetadata(video);
         const sourceFallback = typeof metadata?.redditVideoSources?.fallbackUrl === 'string'
             ? cleanup(metadata.redditVideoSources.fallbackUrl)
             : '';
@@ -205,33 +259,279 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                 .map((candidate: string) => cleanup(candidate))
             : [];
 
-        if (currentVideo?.platform === 'reddit') {
-            if (typeof sourceFallback === 'string' && sourceFallback.trim()) return getRedditVideoProxyUrl(sourceFallback);
-
-            const firstCandidate = sourceCandidates[0];
-            if (firstCandidate) return getRedditVideoProxyUrl(firstCandidate);
-
-            const seed = sourceDash || sourceHls || (typeof url === 'string' ? cleanup(url) : '');
+        const getMp4FallbackUrl = (): string => {
+            const seed = sourceDash || sourceHls || sourceFallback || cleanedVideoUrl;
             const seedId = getVideoId(seed);
             const querySuffix = getQuerySuffix(seed);
             const generatedCandidates = buildMp4Candidates(seedId, querySuffix);
-            if (generatedCandidates.length > 0) {
-                return getRedditVideoProxyUrl(generatedCandidates[0]);
+            const explicitCandidates = [sourceFallback, ...sourceCandidates].filter(
+                (candidate): candidate is string => typeof candidate === 'string' && isMp4Url(candidate)
+            );
+            const mergedCandidates = Array.from(new Set([...explicitCandidates, ...generatedCandidates]));
+            const cmafCandidate = mergedCandidates.find((candidate) => isCmafUrl(candidate));
+            if (cmafCandidate) {
+                return cmafCandidate;
+            }
+            if (mergedCandidates.length > 0) {
+                return mergedCandidates[0];
             }
 
-            // As a last resort keep current source.
-            if (typeof sourceDash === 'string' && sourceDash.trim()) return getRedditVideoProxyUrl(sourceDash);
-            if (typeof sourceHls === 'string' && sourceHls.trim()) return getRedditVideoProxyUrl(sourceHls);
-        }
-        const cleaned = typeof url === 'string' ? cleanup(url) : url;
-        if (currentVideo?.platform === 'reddit' && typeof cleaned === 'string' && cleaned.includes('v.redd.it')) {
-            return getRedditVideoProxyUrl(cleaned);
-        }
-        return cleaned;
-    }, [currentVideo]);
-    
+            if (generatedCandidates.length > 0) {
+                return generatedCandidates[0];
+            }
 
-        // Preload function is now disabled to reduce network usage
+            if (cleanedVideoUrl.includes('v.redd.it') && isMp4Url(cleanedVideoUrl)) {
+                return cleanedVideoUrl;
+            }
+
+            return '';
+        };
+
+        const mp4FallbackUrl = getMp4FallbackUrl();
+
+        if (mp4FallbackUrl && isCmafUrl(mp4FallbackUrl)) {
+            return {
+                url: mp4FallbackUrl,
+                type: 'mp4',
+                isReddit: true,
+                requiresExternalAudio: false,
+                mp4FallbackUrl
+            };
+        }
+
+        if (sourceFallback && isCmafUrl(sourceFallback)) {
+            return {
+                url: sourceFallback,
+                type: 'mp4',
+                isReddit: true,
+                requiresExternalAudio: false,
+                mp4FallbackUrl
+            };
+        }
+        if (sourceDash) {
+            return { url: sourceDash, type: 'dash', isReddit: true, requiresExternalAudio: false, mp4FallbackUrl };
+        }
+        if (sourceHls) {
+            return { url: sourceHls, type: 'hls', isReddit: true, requiresExternalAudio: false, mp4FallbackUrl };
+        }
+        if (sourceFallback && isDashUrl(sourceFallback)) {
+            return { url: sourceFallback, type: 'dash', isReddit: true, requiresExternalAudio: false, mp4FallbackUrl };
+        }
+        if (sourceFallback && isHlsUrl(sourceFallback)) {
+            return { url: sourceFallback, type: 'hls', isReddit: true, requiresExternalAudio: false, mp4FallbackUrl };
+        }
+        if (sourceFallback && isMp4Url(sourceFallback)) {
+            return {
+                url: sourceFallback,
+                type: 'mp4',
+                isReddit: true,
+                requiresExternalAudio: true,
+                mp4FallbackUrl
+            };
+        }
+        if (sourceCandidates.length > 0) {
+            const preferredCandidate = sourceCandidates.find((candidate: string) => isCmafUrl(candidate)) || sourceCandidates[0];
+            return {
+                url: preferredCandidate,
+                type: 'mp4',
+                isReddit: true,
+                requiresExternalAudio: !isCmafUrl(preferredCandidate),
+                mp4FallbackUrl
+            };
+        }
+
+        const seed = sourceDash || sourceHls || sourceFallback || cleanedVideoUrl;
+        const seedId = getVideoId(seed);
+        const querySuffix = getQuerySuffix(seed);
+        const generatedCandidates = buildMp4Candidates(seedId, querySuffix);
+        if (generatedCandidates.length > 0) {
+            const preferredCandidate = generatedCandidates.find((candidate: string) => isCmafUrl(candidate)) || generatedCandidates[0];
+            return {
+                url: preferredCandidate,
+                type: 'mp4',
+                isReddit: true,
+                requiresExternalAudio: !isCmafUrl(preferredCandidate),
+                mp4FallbackUrl
+            };
+        }
+
+        if (isDashUrl(cleanedVideoUrl)) {
+            return { url: cleanedVideoUrl, type: 'dash', isReddit: true, requiresExternalAudio: false, mp4FallbackUrl };
+        }
+        if (isHlsUrl(cleanedVideoUrl)) {
+            return { url: cleanedVideoUrl, type: 'hls', isReddit: true, requiresExternalAudio: false, mp4FallbackUrl };
+        }
+        if (isCmafUrl(cleanedVideoUrl)) {
+            return { url: cleanedVideoUrl, type: 'mp4', isReddit: true, requiresExternalAudio: false, mp4FallbackUrl };
+        }
+        if (cleanedVideoUrl.includes('v.redd.it')) {
+            return {
+                url: cleanedVideoUrl,
+                type: 'mp4',
+                isReddit: true,
+                requiresExternalAudio: true,
+                mp4FallbackUrl
+            };
+        }
+
+        return { url: cleanedVideoUrl, type: 'mp4', isReddit: true, requiresExternalAudio: false, mp4FallbackUrl };
+    }, [parseVideoMetadata]);
+
+    const playbackSource = useMemo(
+        () => resolvePlaybackSource(currentVideo),
+        [currentVideo, resolvePlaybackSource]
+    );
+
+    const activePlaybackSource = playbackOverride || playbackSource;
+
+    const getVideoUrl = useCallback((url: string, videoOverride?: Video) => {
+        const targetVideo = videoOverride || currentVideo;
+        if (!targetVideo) return '';
+
+        if (videoOverride && videoOverride.id !== currentVideo?.id) {
+            return resolvePlaybackSource(videoOverride).url;
+        }
+
+        if (targetVideo.platform === 'reddit') {
+            return activePlaybackSource.url || url;
+        }
+
+        return typeof url === 'string' ? url.replace(/&amp;/g, '&').trim() : url;
+    }, [currentVideo, activePlaybackSource.url, resolvePlaybackSource]);
+
+    const teardownAdaptivePlayers = useCallback(() => {
+        if (dashPlayerRef.current) {
+            dashPlayerRef.current.reset();
+            dashPlayerRef.current = null;
+        }
+        if (hlsPlayerRef.current) {
+            hlsPlayerRef.current.destroy();
+            hlsPlayerRef.current = null;
+        }
+    }, []);
+
+    useEffect(() => {
+        if (!open || !currentVideo || currentVideo.platform !== 'reddit' || !videoRef.current) {
+            teardownAdaptivePlayers();
+            return;
+        }
+
+        const videoElement = videoRef.current;
+        videoElement.loop = isLooping;
+        videoElement.muted = isMuted;
+        const isCmafUrl = (value: string) => /\/CMAF(_\d+)?\.mp4(\?|$)/i.test(value);
+        const attemptPlay = () => {
+            const playPromise = videoElement.play();
+            if (playPromise && typeof playPromise.catch === 'function') {
+                playPromise.catch((error: unknown) => {
+                    if (!isPlayInterruptedError(error)) {
+                        console.error('Adaptive playback start failed:', error);
+                    }
+                });
+            }
+        };
+
+        const maybeFallbackToMp4 = (reason: string) => {
+            const fallbackUrl = activePlaybackSource.mp4FallbackUrl;
+            if (!fallbackUrl || fallbackUrl === activePlaybackSource.url || activePlaybackSource.type === 'mp4') {
+                return;
+            }
+            console.warn(`Falling back to mp4 Reddit source due to ${reason}`, {
+                current: activePlaybackSource.url,
+                fallback: fallbackUrl
+            });
+            setPlaybackOverride({
+                url: fallbackUrl,
+                type: 'mp4',
+                isReddit: true,
+                requiresExternalAudio: !isCmafUrl(fallbackUrl),
+                mp4FallbackUrl: fallbackUrl
+            });
+        };
+
+        if (activePlaybackSource.type === 'dash' && activePlaybackSource.url) {
+            teardownAdaptivePlayers();
+            const dashPlayer = dashjs.MediaPlayer().create();
+            dashPlayerRef.current = dashPlayer;
+            dashPlayer.initialize(videoElement, activePlaybackSource.url, true);
+
+            const failoverTimer = window.setTimeout(() => {
+                const stuck =
+                    videoElement.readyState < 2 ||
+                    !Number.isFinite(videoElement.duration) ||
+                    videoElement.duration <= 0;
+                if (stuck) {
+                    maybeFallbackToMp4('dash_timeout');
+                }
+            }, 7000);
+
+            dashPlayer.on(dashjs.MediaPlayer.events.ERROR, (event: any) => {
+                console.error('DASH playback error:', event);
+                maybeFallbackToMp4('dash_error');
+            });
+            dashPlayer.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, () => {
+                setIsBuffering(false);
+                attemptPlay();
+            });
+            return () => {
+                window.clearTimeout(failoverTimer);
+                videoElement.onloadedmetadata = null;
+                teardownAdaptivePlayers();
+            };
+        }
+
+        if (activePlaybackSource.type === 'hls' && activePlaybackSource.url) {
+            teardownAdaptivePlayers();
+            const failoverTimer = window.setTimeout(() => {
+                const stuck =
+                    videoElement.readyState < 2 ||
+                    !Number.isFinite(videoElement.duration) ||
+                    videoElement.duration <= 0;
+                if (stuck) {
+                    maybeFallbackToMp4('hls_timeout');
+                }
+            }, 7000);
+
+            if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+                videoElement.src = activePlaybackSource.url;
+                videoElement.load();
+                videoElement.onloadedmetadata = () => {
+                    setIsBuffering(false);
+                    attemptPlay();
+                };
+            } else if (Hls.isSupported()) {
+                const hls = new Hls({
+                    enableWorker: true,
+                    lowLatencyMode: false
+                });
+                hlsPlayerRef.current = hls;
+                hls.loadSource(activePlaybackSource.url);
+                hls.attachMedia(videoElement);
+                hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    setIsBuffering(false);
+                    attemptPlay();
+                });
+                hls.on(Hls.Events.ERROR, (_event, data) => {
+                    if (data?.fatal) {
+                        console.error('HLS playback error:', data);
+                        maybeFallbackToMp4('hls_error');
+                    }
+                });
+            } else {
+                console.error('HLS is not supported in this browser');
+                maybeFallbackToMp4('hls_unsupported');
+            }
+            return () => {
+                window.clearTimeout(failoverTimer);
+                teardownAdaptivePlayers();
+            };
+        }
+
+        teardownAdaptivePlayers();
+        return undefined;
+    }, [currentVideo, open, activePlaybackSource, isLooping, isMuted, teardownAdaptivePlayers]);
+
+    // Preload function is now disabled to reduce network usage
     const preloadNextVideo = useCallback(() => {
         if (!open || !videos.length) {
             return;
@@ -257,12 +557,18 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         } else {
             setNextYouTubeEmbedUrl('');
             if (nextVideoPreloadRef.current) {
-                nextVideoPreloadRef.current.src = getVideoUrl(nextVideo.videoUrl);
-                nextVideoPreloadRef.current.preload = 'auto';
-                nextVideoPreloadRef.current.load();
+                const nextPlayback = resolvePlaybackSource(nextVideo);
+                if (nextPlayback.type === 'mp4' && nextPlayback.url) {
+                    nextVideoPreloadRef.current.src = nextPlayback.url;
+                    nextVideoPreloadRef.current.preload = 'auto';
+                    nextVideoPreloadRef.current.load();
+                } else {
+                    nextVideoPreloadRef.current.removeAttribute('src');
+                    nextVideoPreloadRef.current.load();
+                }
             }
         }
-    }, [open, videos, currentIndex, getYouTubeEmbedUrl, getVideoUrl]);
+    }, [open, videos, currentIndex, getYouTubeEmbedUrl, resolvePlaybackSource]);
 
     const syncMedia = useCallback((force = false) => {
         const videoElement = videoRef.current;
@@ -339,11 +645,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                         
                         // Keep muted for mobile autoplay compatibility
                         // Unmute after playback starts if it wasn't muted before
-                        if (!isMuted) {
+                        if (!isMutedRef.current) {
                             videoRef.current!.muted = false;
                         }
                     }).catch(err => {
-                        console.error('Error playing video:', err);
+                        if (!isPlayInterruptedError(err)) {
+                            console.error('Error playing video:', err);
+                        }
                         setIsBuffering(false);
                         // On mobile, if autoplay fails, we might need to handle it differently
                         // For now, keep it muted and let user interaction trigger play
@@ -353,7 +661,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         }, 300); // Increased delay to ensure DOM is ready
         
         return () => clearTimeout(timer);
-    }, [currentIndex, isMuted, measureNetworkSpeed, preloadNextVideo]);
+    }, [currentIndex, measureNetworkSpeed, preloadNextVideo]);
 
     useEffect(() => {
         preloadNextVideo();
@@ -367,40 +675,41 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         }
 
         if (currentVideo.platform === 'youtube') {
-            // YouTube audio is handled by the iframe player itself.
-            setHasAudioTrack(true);
-            setIsAudioReady(true);
             audioRef.current.pause();
             audioRef.current.removeAttribute('src');
             audioRef.current.load();
+            setHasAudioTrack(false);
+            setIsAudioReady(false);
+            return;
+        }
+
+        if (!activePlaybackSource.requiresExternalAudio) {
+            audioRef.current.pause();
+            audioRef.current.removeAttribute('src');
+            audioRef.current.load();
+            setHasAudioTrack(false);
+            setIsAudioReady(false);
             return;
         }
 
         const audioElement = audioRef.current;
-        let metadata: any = currentVideo.metadata;
-
-        if (typeof metadata === 'string') {
-            try {
-                metadata = JSON.parse(metadata);
-            } catch (error) {
-                console.error('Failed to parse video metadata for audio track:', error);
-                metadata = null;
-            }
-        }
+        const metadata = parseVideoMetadata(currentVideo);
 
         const isRedditVideo =
             currentVideo.platform === 'reddit' ||
             (currentVideo.videoUrl && currentVideo.videoUrl.includes('v.redd.it'));
         let rawAudioUrl = metadata?.audioUrl;
 
-        if ((!rawAudioUrl || typeof rawAudioUrl !== 'string') && isRedditVideo && currentVideo.videoUrl) {
-            const match = currentVideo.videoUrl.match(/v\.redd\.it\/([^/?]+)/i);
+        if ((!rawAudioUrl || typeof rawAudioUrl !== 'string') && isRedditVideo) {
+            const audioSeedUrl = [currentVideo.videoUrl, activePlaybackSource.url]
+                .find((candidate) => typeof candidate === 'string' && candidate.includes('v.redd.it')) || '';
+            const match = audioSeedUrl.match(/v\.redd\.it\/([^/?]+)/i);
             const videoId = match?.[1];
             if (videoId) {
-                const querySuffix = currentVideo.videoUrl.includes('?')
-                    ? currentVideo.videoUrl.substring(currentVideo.videoUrl.indexOf('?'))
+                const querySuffix = audioSeedUrl.includes('?')
+                    ? audioSeedUrl.substring(audioSeedUrl.indexOf('?'))
                     : '';
-                rawAudioUrl = `https://v.redd.it/${videoId}/DASH_AUDIO_128.mp4${querySuffix}`;
+                rawAudioUrl = `https://v.redd.it/${videoId}/CMAF_AUDIO_128.mp4${querySuffix}`;
             }
         }
 
@@ -452,7 +761,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
             audioElement.removeEventListener('canplay', handleCanPlay);
             audioElement.removeEventListener('error', handleError);
         };
-    }, [currentVideo, isMuted, isPlaying, isLooping, syncMedia]);
+    }, [currentVideo, isMuted, isPlaying, isLooping, syncMedia, activePlaybackSource.requiresExternalAudio, activePlaybackSource.url, parseVideoMetadata]);
 
     useEffect(() => {
         const videoElement = videoRef.current;
@@ -565,8 +874,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
             const current = videoRef.current.currentTime;
             const videoDuration = videoRef.current.duration;
             setCurrentTime(current);
-            setDuration(videoDuration);
-            setProgress((current / videoDuration) * 100);
+            if (Number.isFinite(videoDuration) && videoDuration > 0) {
+                setDuration(videoDuration);
+                setProgress((current / videoDuration) * 100);
+            } else {
+                setDuration(0);
+                setProgress(0);
+            }
         }
     };
 
@@ -577,6 +891,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         const pos = (e.clientX - rect.left) / rect.width;
         
         if (videoRef.current) {
+            if (!Number.isFinite(videoRef.current.duration) || videoRef.current.duration <= 0) {
+                return;
+            }
             // Check if the video data is already loaded for this position
             const newTime = pos * videoRef.current.duration;
             const buffered = videoRef.current.buffered;
@@ -664,8 +981,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                     }
                 })
                 .catch(e => {
-                    console.error('Error playing video:', e);
-                    setIsPlaying(false);
+                    if (!isPlayInterruptedError(e)) {
+                        console.error('Error playing video:', e);
+                        setIsPlaying(false);
+                    }
                 });
         }
     }, [hasAudioTrack, isAudioReady, isMuted, isPlaying, syncMedia]);
@@ -714,6 +1033,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
 
     // Format time for display (e.g., 1:23)
     const formatTime = (seconds: number) => {
+        if (!Number.isFinite(seconds) || seconds < 0) {
+            return '0:00';
+        }
         const mins = Math.floor(seconds / 60);
         const secs = Math.floor(seconds % 60);
         return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
@@ -908,6 +1230,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
 
     // Clean up function to properly handle audio and video elements before closing
     const handleClose = () => {
+        teardownAdaptivePlayers();
         // Stop video playback
         if (videoRef.current) {
             videoRef.current.pause();
@@ -1110,6 +1433,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                             <iframe
                                                 ref={youtubeIframeRef}
                                                 src={getYouTubeEmbedUrl(currentVideo)}
+                                                title={currentVideo.title || 'YouTube video'}
                                                 style={{
                                                     width: isSmallDevice ? '100vw' : '100%',
                                                     height: isSmallDevice ? '100dvh' : '100%',
@@ -1159,7 +1483,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                             maxWidth: '100%',
                                             transition: 'filter 0.3s ease'
                                         }}
-                                        src={getVideoUrl(currentVideo.videoUrl)}
+                                        src={activePlaybackSource.type === 'mp4' ? activePlaybackSource.url : undefined}
                                         playsInline
                                         preload="auto"
                                         autoPlay
@@ -1185,8 +1509,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                         onError={(e) => {
                                             setIsBuffering(false);
                                             console.error('Video playback error:', e);
-                                            // Avoid forcing synthetic DASH_360 URLs; they fail for many Reddit posts.
-                                            // Keep the exact source URL captured from Reddit metadata.
+                                            if (activePlaybackSource.type !== 'mp4') {
+                                                return;
+                                            }
                                             if (videoRef.current && currentVideo.videoUrl.includes('v.redd.it')) {
                                                 const fallbackSrc = getVideoUrl(currentVideo.videoUrl);
                                                 if (fallbackSrc && videoRef.current.src !== fallbackSrc) {
@@ -1196,14 +1521,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                                         console.error('Fallback source also failed:', err);
                                                     });
                                                 }
-                                            }
-                                        }}
-                                        onClick={() => {
-                                            // Ensure video can be played on user interaction
-                                            if (videoRef.current && videoRef.current.paused) {
-                                                videoRef.current.play().catch(err => {
-                                                    console.error('Error playing video on click:', err);
-                                                });
                                             }
                                         }}
                                     />

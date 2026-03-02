@@ -158,14 +158,24 @@ async function updateThumbnailUrls(options: { regenerateFailedOnly?: boolean; fo
           }
           
           if (videoId) {
+            const querySuffix = video.videoUrl.includes('?')
+              ? video.videoUrl.substring(video.videoUrl.indexOf('?'))
+              : '?source=fallback';
+            const suffixes = Array.from(new Set([querySuffix, '']));
+
             // Create a list of possible URL formats to try
-            const urlFormats = [
-              video.videoUrl, // Original URL
-              `https://v.redd.it/${videoId}/DASH_720.mp4`, // Standard format
-              `https://v.redd.it/${videoId}/DASH_480.mp4`, // Lower quality
-              `https://v.redd.it/${videoId}/DASH_360.mp4`, // Even lower quality
-              `https://v.redd.it/${videoId}/DASH_96.mp4`, // Lowest quality
-            ];
+            const urlFormats = [video.videoUrl, video.videoUrl.split('?')[0]];
+            for (const suffix of suffixes) {
+              urlFormats.push(
+                `https://v.redd.it/${videoId}/CMAF_720.mp4${suffix}`,
+                `https://v.redd.it/${videoId}/CMAF_480.mp4${suffix}`,
+                `https://v.redd.it/${videoId}/CMAF_360.mp4${suffix}`,
+                `https://v.redd.it/${videoId}/DASH_720.mp4${suffix}`,
+                `https://v.redd.it/${videoId}/DASH_480.mp4${suffix}`,
+                `https://v.redd.it/${videoId}/DASH_360.mp4${suffix}`,
+                `https://v.redd.it/${videoId}/DASH_96.mp4${suffix}`
+              );
+            }
             
             // Try each URL format until one works
             let success = false;

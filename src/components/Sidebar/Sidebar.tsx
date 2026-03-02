@@ -5,7 +5,6 @@ import {
   Button,
   Divider,
   styled,
-  useTheme,
 } from '@mui/material';
 import {
   Reddit as RedditIcon,
@@ -270,8 +269,6 @@ const Sidebar: React.FC<SidebarProps> = ({
   onVideoSubmission,
   isMobileDrawer = false,
 }) => {
-  const theme = useTheme();
-
   return (
     <StyledSidebar className={isMobileDrawer ? 'mobile-drawer' : ''}>
       {/* Platform Selection */}

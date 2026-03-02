@@ -3,6 +3,32 @@ import { Video } from '../types/Video';
 
 const API_URL = process.env.REACT_APP_API_URL || '/api';
 
+const getApiOrigin = (): string => {
+    if (!API_URL) return '';
+    if (/^https?:\/\//i.test(API_URL)) {
+        try {
+            return new URL(API_URL).origin;
+        } catch {
+            return '';
+        }
+    }
+    if (typeof window !== 'undefined') {
+        return window.location.origin;
+    }
+    return '';
+};
+
+export const getBackendAssetUrl = (assetPath: string): string => {
+    if (!assetPath) return assetPath;
+    if (/^https?:\/\//i.test(assetPath) || assetPath.startsWith('data:')) {
+        return assetPath;
+    }
+
+    const normalizedPath = assetPath.startsWith('/') ? assetPath : `/${assetPath}`;
+    const apiOrigin = getApiOrigin();
+    return apiOrigin ? `${apiOrigin}${normalizedPath}` : normalizedPath;
+};
+
 export const getRedditAudioProxyUrl = (audioUrl: string): string => {
     const params = new URLSearchParams();
     params.append('url', audioUrl);

@@ -7,17 +7,6 @@
         "@emotion/styled": "^11.14.1",
         "@mui/icons-material": "^6.5.0",
         "@mui/material": "^6.5.0",
-        "@testing-library/dom": "^10.4.1",
-        "@testing-library/jest-dom": "^6.8.0",
-        "@testing-library/react": "^16.3.0",
-        "@testing-library/user-event": "^13.5.0",
-        "@tsparticles/engine": "^3.9.1",
-        "@tsparticles/react": "^3.0.0",
-        "@tsparticles/slim": "^3.9.1",
-        "@types/jest": "^27.5.2",
-        "@types/node": "^16.18.126",
-        "@types/react": "^19.1.15",
-        "@types/react-dom": "^19.1.9",
         "axios": "^1.12.2",
         "dashjs": "^5.1.1",
         "framer-motion": "^12.23.22",
@@ -26,7 +15,6 @@
         "react-dom": "^19.1.1",
         "react-scripts": "5.0.1",
         "react-swipeable": "^7.0.2",
-        "typescript": "^4.9.5",
         "web-vitals": "^2.1.4"
     },
     "scripts": {
@@ -43,7 +31,7 @@
         "build:full": "npm run frontend:build && npm run backend:build",
         "start:prod": "node backend/dist/index.js",
         "start:prod:scrape": "node backend/dist/index.js --enable-scraping",
-        "postinstall": "npm install --prefix backend"
+        "postinstall": "node scripts/install-backend-deps.cjs"
     },
     "eslintConfig": {
         "extends": [
@@ -65,6 +53,15 @@
     },
     "proxy": "http://localhost:3002",
     "devDependencies": {
-        "concurrently": "^8.2.2"
+        "@testing-library/dom": "^10.4.1",
+        "@testing-library/jest-dom": "^6.8.0",
+        "@testing-library/react": "^16.3.0",
+        "@testing-library/user-event": "^13.5.0",
+        "@types/jest": "^27.5.2",
+        "@types/node": "^16.18.126",
+        "@types/react": "^19.1.15",
+        "@types/react-dom": "^19.1.9",
+        "concurrently": "^8.2.2",
+        "typescript": "^4.9.5"
     }
 }

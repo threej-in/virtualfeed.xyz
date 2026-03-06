@@ -188,7 +188,7 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
             page = 1, 
             limit = 12,
             search,
-            sortBy = 'views',
+            sortBy = 'createdAt',
             order = 'desc',
             subreddit,
             platform,

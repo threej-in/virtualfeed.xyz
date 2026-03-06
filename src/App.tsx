@@ -138,7 +138,7 @@ function App() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [filterValues, setFilterValues] = useState({
     limit: 12,
-    sortBy: "views" as "createdAt" | "views" | "likes",
+    sortBy: "createdAt" as "createdAt" | "views" | "likes",
     order: "desc" as "asc" | "desc",
     search: undefined as string | undefined,
     platform: "", // Default to show all platforms
@@ -558,7 +558,7 @@ function App() {
                   // Reset all filters and return to homepage
                   setFilterValues({
                     limit: 12,
-                    sortBy: "views",
+                    sortBy: "createdAt",
                     order: "desc",
                     search: "",
                     platform: "",
@@ -775,7 +775,7 @@ function App() {
                         // Reset all filters and return to homepage
                         setFilterValues({
                           limit: 12,
-                          sortBy: "views",
+                          sortBy: "createdAt",
                           order: "desc",
                           search: "",
                           platform: "", // Show all platforms by default

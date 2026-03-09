@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Paper, InputBase, IconButton, Box, styled, useMediaQuery, useTheme } from '@mui/material';
 import { Search as SearchIcon, Close as CloseIcon } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -30,14 +30,19 @@ interface SearchBarProps {
   onSearch: (query: string) => void;
   mobileView?: boolean;
   onSearchOpenChange?: (isOpen: boolean) => void;
+  initialQuery?: string;
 }
 
-const SearchBar: React.FC<SearchBarProps> = ({ onSearch, mobileView = false, onSearchOpenChange }) => {
-  const [query, setQuery] = useState('');
+const SearchBar: React.FC<SearchBarProps> = ({ onSearch, mobileView = false, onSearchOpenChange, initialQuery = '' }) => {
+  const [query, setQuery] = useState(initialQuery);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
+  useEffect(() => {
+    setQuery(initialQuery);
+  }, [initialQuery]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

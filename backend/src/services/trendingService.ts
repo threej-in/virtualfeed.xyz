@@ -141,6 +141,7 @@ export class TrendingService {
       platform?: string;
       search?: string;
       showNsfw?: boolean;
+      nsfwOnly?: boolean;
       language?: string;
       excludeVideoIds?: number[];
     } = {}
@@ -179,7 +180,9 @@ export class TrendingService {
       }
       
       // Add NSFW filter
-      if (!filters.showNsfw) {
+      if (filters.nsfwOnly) {
+        whereConditions.push('nsfw = 1');
+      } else if (!filters.showNsfw) {
         whereConditions.push('(nsfw = 0 OR nsfw IS NULL)');
       }
       
@@ -379,6 +382,7 @@ export class TrendingService {
       platform?: string;
       search?: string;
       showNsfw?: boolean;
+      nsfwOnly?: boolean;
       language?: string;
       excludeVideoIds?: number[];
     } = {},
@@ -421,7 +425,9 @@ export class TrendingService {
       }
       
       // Add NSFW filter
-      if (!filters.showNsfw) {
+      if (filters.nsfwOnly) {
+        baseWhereConditions.push('nsfw = 1');
+      } else if (!filters.showNsfw) {
         baseWhereConditions.push('(nsfw = 0 OR nsfw IS NULL)');
       }
       

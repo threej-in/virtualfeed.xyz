@@ -199,8 +199,30 @@ export class RedditScraper {
             }
             
             // For AI-focused subreddits, we don't need to check for search terms
-            const aiSubreddits = ['StableDiffusion', 'midjourney', 'sdforall', 'aivideo', 'aivideos', 'aihub', 'AIGeneratedContent', 'aiArt', 'chatgpttoolbox', 'aiart', 'artificial', 'machinelearning'];
-            const isAIFocusedSubreddit = aiSubreddits.includes(post.subreddit.display_name);
+            const aiSubreddits = [
+                'stablediffusion',
+                'midjourney',
+                'sdforall',
+                'aivideo',
+                'aivideos',
+                'aihub',
+                'desiadultfusion',
+                'aigeneratedcontent',
+                'aiart',
+                'chatgpttoolbox',
+                'artificial',
+                'machinelearning',
+                'nanobanana',
+                'veo3',
+                'dalle2',
+                'leonardiai',
+                'higgsfieldai',
+                'klingaivideos',
+                'aigeneratedart',
+                'aiimages'
+            ];
+            const postSubredditName = (post.subreddit.display_name || '').toLowerCase();
+            const isAIFocusedSubreddit = aiSubreddits.includes(postSubredditName);
             
             // Check for required search terms (only for non-AI-focused subreddits)
             if (!isAIFocusedSubreddit) {

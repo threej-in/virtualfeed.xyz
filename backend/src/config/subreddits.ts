@@ -43,6 +43,60 @@ export const subreddits: SubredditConfig[] = [
         searchTerms: []  // No search terms required for AI-focused subreddits
     },
     {
+        name: 'desiadultfusion',
+        minScore: 1,
+        excludeTerms: [],
+        searchTerms: []  // No search terms required for AI-focused subreddits
+    },
+    {
+        name: 'NanoBanana',
+        minScore: 1,
+        excludeTerms: [],
+        searchTerms: []
+    },
+    {
+        name: 'Veo3',
+        minScore: 1,
+        excludeTerms: [],
+        searchTerms: []
+    },
+    {
+        name: 'Dalle2',
+        minScore: 1,
+        excludeTerms: [],
+        searchTerms: []
+    },
+    {
+        name: 'LeonardiAI',
+        minScore: 1,
+        excludeTerms: [],
+        searchTerms: []
+    },
+    {
+        name: 'HiggsfieldAI',
+        minScore: 1,
+        excludeTerms: [],
+        searchTerms: []
+    },
+    {
+        name: 'KlingAIVideos',
+        minScore: 1,
+        excludeTerms: [],
+        searchTerms: []
+    },
+    {
+        name: 'AIGeneratedArt',
+        minScore: 1,
+        excludeTerms: [],
+        searchTerms: []
+    },
+    {
+        name: 'AIImages',
+        minScore: 1,
+        excludeTerms: [],
+        searchTerms: []
+    },
+    {
         name: 'AIGeneratedContent',  // Added new AI-focused subreddit
         minScore: 1,
         excludeTerms: [],

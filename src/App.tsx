@@ -26,6 +26,94 @@ import { Video } from "./types/Video";
 import { getVideos, submitVideo } from "./services/api";
 import { theme } from "./theme";
 
+const DEFAULT_FILTER_VALUES = {
+  limit: 12,
+  sortBy: "createdAt" as "createdAt" | "views" | "likes",
+  order: "desc" as "asc" | "desc",
+  search: undefined as string | undefined,
+  platform: "",
+  showNsfw: false,
+  trending: undefined as "24h" | "48h" | "1w" | undefined,
+  language: "all",
+};
+
+const containsNsfwToken = (value?: string): boolean =>
+  !!value && /(?:^|\s)#?nsfw(?:\s|$)/i.test(value);
+
+const parseInitialStateFromUrl = () => {
+  if (typeof window === "undefined") {
+    return { filters: DEFAULT_FILTER_VALUES, videoId: null as number | null };
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const sortByParam = params.get("sortBy");
+  const orderParam = params.get("order");
+  const trendingParam = params.get("trending");
+  const searchParam = params.get("q");
+  const platformParam = params.get("platform");
+  const languageParam = params.get("language");
+  const nsfwParam = params.get("nsfw");
+  const videoIdParam = params.get("video");
+
+  const sortBy =
+    sortByParam === "createdAt" || sortByParam === "views" || sortByParam === "likes"
+      ? sortByParam
+      : DEFAULT_FILTER_VALUES.sortBy;
+
+  const order =
+    orderParam === "asc" || orderParam === "desc"
+      ? orderParam
+      : DEFAULT_FILTER_VALUES.order;
+
+  const trending =
+    trendingParam === "24h" || trendingParam === "48h" || trendingParam === "1w"
+      ? trendingParam
+      : undefined;
+
+  const platform = platformParam === "youtube" || platformParam === "reddit" ? platformParam : "";
+  const language = languageParam && languageParam.trim() ? languageParam.trim() : "all";
+  const search = searchParam && searchParam.trim() ? searchParam.trim() : undefined;
+  const showNsfw =
+    nsfwParam === "1" || nsfwParam === "true" || containsNsfwToken(search);
+
+  const parsedVideoId = videoIdParam ? Number(videoIdParam) : NaN;
+  const videoId = Number.isFinite(parsedVideoId) && parsedVideoId > 0 ? parsedVideoId : null;
+
+  return {
+    filters: {
+      ...DEFAULT_FILTER_VALUES,
+      sortBy,
+      order,
+      trending,
+      search,
+      platform,
+      showNsfw,
+      language,
+    },
+    videoId,
+  };
+};
+
+const ensureMetaTag = (attribute: "name" | "property", key: string, content: string) => {
+  let meta = document.head.querySelector(`meta[${attribute}="${key}"]`) as HTMLMetaElement | null;
+  if (!meta) {
+    meta = document.createElement("meta");
+    meta.setAttribute(attribute, key);
+    document.head.appendChild(meta);
+  }
+  meta.setAttribute("content", content);
+};
+
+const ensureCanonical = (href: string) => {
+  let canonical = document.head.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
+  if (!canonical) {
+    canonical = document.createElement("link");
+    canonical.setAttribute("rel", "canonical");
+    document.head.appendChild(canonical);
+  }
+  canonical.setAttribute("href", href);
+};
+
 const StyledContainer = styled(Container)(({ theme }) => ({
   position: "relative",
   height: "100vh",
@@ -126,6 +214,7 @@ const LoadingContainer = styled(Box)(({ theme }) => ({
 }));
 
 function App() {
+  const initialStateRef = useRef(parseInitialStateFromUrl());
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -136,16 +225,10 @@ function App() {
   const [showError, setShowError] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
-  const [filterValues, setFilterValues] = useState({
-    limit: 12,
-    sortBy: "createdAt" as "createdAt" | "views" | "likes",
-    order: "desc" as "asc" | "desc",
-    search: undefined as string | undefined,
-    platform: "", // Default to show all platforms
-    showNsfw: false,
-    trending: undefined as "24h" | "48h" | "1w" | undefined, // No trending filter by default - show recent videos
-    language: "all",
-  });
+  const [filterValues, setFilterValues] = useState(initialStateRef.current.filters);
+  const [pendingVideoId, setPendingVideoId] = useState<number | null>(
+    initialStateRef.current.videoId
+  );
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [isFallbackContent, setIsFallbackContent] = useState(false);
   const [isVideoSubmissionOpen, setIsVideoSubmissionOpen] = useState(false);
@@ -156,6 +239,18 @@ function App() {
   const inFlightRequestRef = useRef(false);
   const hoverPlayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hoverCandidateVideoIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!pendingVideoId || videos.length === 0) {
+      return;
+    }
+
+    const matchedVideo = videos.find((video) => video.id === pendingVideoId);
+    if (matchedVideo) {
+      setSelectedVideo(matchedVideo);
+      setPendingVideoId(null);
+    }
+  }, [pendingVideoId, videos]);
 
   // Detect if we're on a large device (desktop/tablet)
   const isLargeDevice = useMediaQuery("(min-width:900px)");
@@ -399,6 +494,18 @@ function App() {
   }, [loading, hasMore, loadMoreVideos]);
 
   const handleSearch = (query: string) => {
+    const isNsfwSearch = containsNsfwToken(query);
+    if (isNsfwSearch && !filterValues.showNsfw) {
+      const approved = window.confirm(
+        'This search contains "nsfw". Enable NSFW filter to continue?'
+      );
+      if (!approved) {
+        return;
+      }
+      setFilterValues((prev) => ({ ...prev, showNsfw: true, search: query }));
+      return;
+    }
+
     setFilterValues((prev) => ({ ...prev, search: query }));
   };
 
@@ -485,6 +592,123 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const searchValue = filterValues.search?.trim();
+    const params = new URLSearchParams();
+
+    if (searchValue) params.set("q", searchValue);
+    if (filterValues.platform) params.set("platform", filterValues.platform);
+    if (filterValues.language && filterValues.language !== "all") {
+      params.set("language", filterValues.language);
+    }
+    if (filterValues.sortBy !== DEFAULT_FILTER_VALUES.sortBy) {
+      params.set("sortBy", filterValues.sortBy);
+    }
+    if (filterValues.order !== DEFAULT_FILTER_VALUES.order) {
+      params.set("order", filterValues.order);
+    }
+    if (filterValues.trending) params.set("trending", filterValues.trending);
+    if (filterValues.showNsfw) params.set("nsfw", "1");
+    if (selectedVideo?.id) params.set("video", String(selectedVideo.id));
+
+    const query = params.toString();
+    const nextUrl = query
+      ? `${window.location.pathname}?${query}`
+      : window.location.pathname;
+    const currentUrl = `${window.location.pathname}${window.location.search}`;
+
+    if (nextUrl !== currentUrl) {
+      window.history.replaceState({}, "", nextUrl);
+    }
+  }, [
+    filterValues.search,
+    filterValues.platform,
+    filterValues.language,
+    filterValues.sortBy,
+    filterValues.order,
+    filterValues.trending,
+    filterValues.showNsfw,
+    selectedVideo?.id,
+  ]);
+
+  useEffect(() => {
+    const baseUrl = `${window.location.origin}${window.location.pathname}${window.location.search}`;
+    const searchValue = filterValues.search?.trim();
+    const defaultTitle = "VirtualFeed | AI Video Discovery";
+    const defaultDescription =
+      "Discover trending AI, YouTube, and Reddit videos in one fast, searchable feed.";
+
+    const title = selectedVideo
+      ? `${selectedVideo.title} | VirtualFeed`
+      : searchValue
+        ? `${searchValue} videos | VirtualFeed`
+        : defaultTitle;
+
+    const description = selectedVideo
+      ? (selectedVideo.description || selectedVideo.title || defaultDescription).slice(0, 160)
+      : searchValue
+        ? `Browse "${searchValue}" videos on VirtualFeed across Reddit and YouTube.`
+        : defaultDescription;
+
+    const selectedThumb = selectedVideo?.thumbnailUrl;
+    const ogImage = selectedThumb
+      ? selectedThumb.startsWith("http")
+        ? selectedThumb
+        : `${window.location.origin}${selectedThumb}`
+      : `${window.location.origin}/logo512.png`;
+
+    document.title = title;
+    ensureMetaTag("name", "description", description);
+    ensureMetaTag("property", "og:title", title);
+    ensureMetaTag("property", "og:description", description);
+    ensureMetaTag("property", "og:url", baseUrl);
+    ensureMetaTag("property", "og:type", selectedVideo ? "video.other" : "website");
+    ensureMetaTag("property", "og:image", ogImage);
+    ensureMetaTag("name", "twitter:card", "summary_large_image");
+    ensureMetaTag("name", "twitter:title", title);
+    ensureMetaTag("name", "twitter:description", description);
+    ensureMetaTag("name", "twitter:image", ogImage);
+    ensureCanonical(baseUrl);
+
+    const jsonLdId = "dynamic-seo-jsonld";
+    let jsonLdScript = document.getElementById(jsonLdId) as HTMLScriptElement | null;
+    if (!jsonLdScript) {
+      jsonLdScript = document.createElement("script");
+      jsonLdScript.type = "application/ld+json";
+      jsonLdScript.id = jsonLdId;
+      document.head.appendChild(jsonLdScript);
+    }
+
+    const jsonLd = selectedVideo
+      ? {
+          "@context": "https://schema.org",
+          "@type": "VideoObject",
+          name: selectedVideo.title,
+          description,
+          thumbnailUrl: [ogImage],
+          uploadDate: selectedVideo.createdAt,
+          contentUrl: selectedVideo.videoUrl,
+          url: baseUrl,
+          publisher: {
+            "@type": "Organization",
+            name: "VirtualFeed",
+          },
+        }
+      : {
+          "@context": "https://schema.org",
+          "@type": "WebSite",
+          name: "VirtualFeed",
+          url: `${window.location.origin}${window.location.pathname}`,
+          potentialAction: {
+            "@type": "SearchAction",
+            target: `${window.location.origin}${window.location.pathname}?q={search_term_string}`,
+            "query-input": "required name=search_term_string",
+          },
+        };
+
+    jsonLdScript.textContent = JSON.stringify(jsonLd);
+  }, [selectedVideo, filterValues.search]);
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -557,14 +781,8 @@ function App() {
                 onClick={() => {
                   // Reset all filters and return to homepage
                   setFilterValues({
-                    limit: 12,
-                    sortBy: "createdAt",
-                    order: "desc",
+                    ...DEFAULT_FILTER_VALUES,
                     search: "",
-                    platform: "",
-                    showNsfw: false,
-                    trending: undefined,
-                    language: "all",
                   });
                   // Reset videos array to trigger a fresh load
                   setVideos([]);
@@ -618,6 +836,7 @@ function App() {
                     onSearch={handleSearch}
                     mobileView={true}
                     onSearchOpenChange={setIsSearchExpanded}
+                    initialQuery={filterValues.search || ""}
                   />
                 </Box>
               </SearchSection>
@@ -774,14 +993,9 @@ function App() {
                       onResetFilters={() => {
                         // Reset all filters and return to homepage
                         setFilterValues({
-                          limit: 12,
-                          sortBy: "createdAt",
-                          order: "desc",
+                          ...DEFAULT_FILTER_VALUES,
                           search: "",
                           platform: "", // Show all platforms by default
-                          showNsfw: false,
-                          trending: undefined, // Show recent videos by default
-                          language: "all",
                         });
                         // Reset videos array to trigger a fresh load
                         setVideos([]);

@@ -199,6 +199,15 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
         const selectedPlatform = typeof platform === 'string' ? platform.toLowerCase().trim() : '';
         const effectiveSortBy = selectedPlatform === 'youtube' ? 'views' : (sortBy as string);
         const effectiveOrder = selectedPlatform === 'youtube' ? 'desc' : (order as string);
+        const rawSearch = typeof search === 'string' ? search.trim() : '';
+        const nsfwTokenRegex = /(?:^|\s)#?nsfw(?:\s|$)/i;
+        const forceNsfwOnly = nsfwTokenRegex.test(rawSearch);
+        const cleanedSearch = rawSearch
+            .replace(/(?:^|\s)#?nsfw(?=\s|$)/gi, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        const effectiveSearch = cleanedSearch || undefined;
+        const effectiveShowNsfw = showNsfw === 'true' || forceNsfwOnly;
 
         const feedMemoryKey = buildFeedMemoryKey(
             req.headers['x-forwarded-for'] as string | undefined,
@@ -250,8 +259,9 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
                     {
                         subreddit: subreddit as string,
                         platform: platform as string,
-                        search: search as string,
-                        showNsfw: showNsfw === 'true',
+                        search: effectiveSearch,
+                        showNsfw: effectiveShowNsfw,
+                        nsfwOnly: forceNsfwOnly,
                         language: normalizedSelectedLanguage,
                         excludeVideoIds: excludeIdsForQuery
                     }
@@ -268,8 +278,9 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
                             {
                                 subreddit: subreddit as string,
                                 platform: platform as string,
-                                search: search as string,
-                                showNsfw: showNsfw === 'true',
+                                search: effectiveSearch,
+                                showNsfw: effectiveShowNsfw,
+                                nsfwOnly: forceNsfwOnly,
                                 language: normalizedSelectedLanguage,
                                 excludeVideoIds: excludeIdsForQuery
                             }
@@ -308,8 +319,9 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
             {
                 subreddit: subreddit as string,
                 platform: platform as string,
-                search: search as string,
-                showNsfw: showNsfw === 'true',
+                search: effectiveSearch,
+                showNsfw: effectiveShowNsfw,
+                nsfwOnly: forceNsfwOnly,
                 language: targetLanguage,
                 excludeVideoIds: excludeIdsForQuery
             },
@@ -327,8 +339,9 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
                     {
                         subreddit: subreddit as string,
                         platform: platform as string,
-                        search: search as string,
-                        showNsfw: showNsfw === 'true',
+                        search: effectiveSearch,
+                        showNsfw: effectiveShowNsfw,
+                        nsfwOnly: forceNsfwOnly,
                         language: targetLanguage,
                         excludeVideoIds: excludeIdsForQuery
                     },

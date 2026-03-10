@@ -119,6 +119,8 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
           display: 'flex',
           flexDirection: 'column',
           backgroundColor: '#181818',
+          borderRadius: { xs: '10px', sm: '12px' },
+          overflow: 'hidden',
           border: '1px solid rgba(255, 255, 255, 0.08)',
           transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
           '&:hover': {
@@ -129,16 +131,11 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
       >
         <Box sx={{ 
           position: 'relative', 
-          paddingTop: { xs: '177.78%', md: '56.25%' },
+          paddingTop: { xs: '125%', md: '56.25%' },
           // Ensure consistent dimensions
           width: '100%',
           height: 0,
           overflow: 'hidden',
-          // Mobile: full height
-          '@media (max-width: 600px)': {
-            paddingTop: '100vh',
-            height: 'calc(100vh - 80px)',
-          },
         }}>
           <Skeleton
             variant="rectangular"
@@ -183,6 +180,8 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
           display: 'flex',
           flexDirection: 'column',
           backgroundColor: '#181818',
+          borderRadius: { xs: '10px', sm: '12px' },
+          overflow: 'hidden',
           border: '1px solid rgba(255, 255, 255, 0.08)',
           transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
           cursor: 'pointer',
@@ -192,9 +191,9 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
           },
           // Mobile TikTok-like styling
           '@media (max-width: 600px)': {
-            borderRadius: 0,
+            borderRadius: '10px',
             height: 'auto',
-            minHeight: 'calc(100vh - 80px)',
+            minHeight: 'auto',
             '&:hover': {
               transform: 'none',
               boxShadow: 'none'
@@ -211,16 +210,11 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
       >
         <Box sx={{ 
           position: 'relative', 
-          paddingTop: { xs: '177.78%', md: '56.25%' },
+          paddingTop: { xs: '125%', md: '56.25%' },
           // Ensure consistent dimensions
           width: '100%',
           height: 0,
           overflow: 'hidden',
-          // Mobile: full height
-          '@media (max-width: 600px)': {
-            paddingTop: '100vh',
-            height: 'calc(100vh - 80px)',
-          },
         }}>
           {!imageLoaded && !isPlaying && (
             <Skeleton
@@ -259,6 +253,7 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
                     left: 0,
                     width: '100%',
                     height: '100%',
+                    borderRadius: 0,
                     objectFit: 'cover',
                     objectPosition: 'center',
                     display: imageLoaded ? 'block' : 'none',
@@ -335,6 +330,7 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
                 left: 0,
                 width: '100%',
                 height: '100%',
+                borderRadius: 0,
                 objectFit: 'cover',
                 objectPosition: 'center',
                 display: imageLoaded ? 'block' : 'none',
@@ -416,9 +412,11 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
           flexGrow: 1,
           p: 1.25,
           '&:last-child': { pb: 1.25 },
-          // Mobile: hide content area for TikTok-like experience
+          // Mobile: keep compact info visible
           '@media (max-width: 600px)': {
-            display: 'none',
+            display: 'block',
+            p: 1,
+            '&:last-child': { pb: 1 },
           }
         }}>
           <Box
@@ -447,9 +445,9 @@ const YouTubeVideoCard: React.FC<YouTubeVideoCardProps> = ({
           <Typography
             variant="body2"
             sx={{
-              color: 'rgba(255, 255, 255, 0.92)',
-              fontSize: '0.92rem',
-              fontWeight: 600,
+              color: 'rgba(255, 255, 255, 0.7)',
+              fontSize: '0.875rem',
+              fontWeight: 400,
               lineHeight: 1.35,
               display: '-webkit-box',
               WebkitLineClamp: 2,

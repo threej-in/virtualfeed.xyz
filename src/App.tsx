@@ -23,24 +23,38 @@ import VideoPlayer from "./components/VideoPlayer/VideoPlayer";
 import VideoSubmission from "./components/VideoSubmission/VideoSubmission";
 import Background from "./components/Background/Background";
 import { Video } from "./types/Video";
-import { getVideos, submitVideo } from "./services/api";
+import { getVideos, submitVideo, VideoFilters } from "./services/api";
 import { theme } from "./theme";
 
-const DEFAULT_FILTER_VALUES = {
+type AppFilterValues = {
+  limit: number;
+  sortBy: NonNullable<VideoFilters["sortBy"]>;
+  order: NonNullable<VideoFilters["order"]>;
+  search?: string;
+  platform: string;
+  showNsfw: boolean;
+  trending?: NonNullable<VideoFilters["trending"]>;
+  language: string;
+};
+
+const DEFAULT_FILTER_VALUES: AppFilterValues = {
   limit: 12,
-  sortBy: "createdAt" as "createdAt" | "views" | "likes",
-  order: "desc" as "asc" | "desc",
+  sortBy: "createdAt",
+  order: "desc",
   search: undefined as string | undefined,
   platform: "",
   showNsfw: false,
-  trending: undefined as "24h" | "48h" | "1w" | undefined,
+  trending: undefined,
   language: "all",
 };
 
 const containsNsfwToken = (value?: string): boolean =>
   !!value && /(?:^|\s)#?nsfw(?:\s|$)/i.test(value);
 
-const parseInitialStateFromUrl = () => {
+const parseInitialStateFromUrl = (): {
+  filters: AppFilterValues;
+  videoId: number | null;
+} => {
   if (typeof window === "undefined") {
     return { filters: DEFAULT_FILTER_VALUES, videoId: null as number | null };
   }
@@ -65,7 +79,7 @@ const parseInitialStateFromUrl = () => {
       ? orderParam
       : DEFAULT_FILTER_VALUES.order;
 
-  const trending =
+  const trending: AppFilterValues["trending"] =
     trendingParam === "24h" || trendingParam === "48h" || trendingParam === "1w"
       ? trendingParam
       : undefined;
@@ -225,7 +239,9 @@ function App() {
   const [showError, setShowError] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
-  const [filterValues, setFilterValues] = useState(initialStateRef.current.filters);
+  const [filterValues, setFilterValues] = useState<AppFilterValues>(
+    initialStateRef.current.filters
+  );
   const [pendingVideoId, setPendingVideoId] = useState<number | null>(
     initialStateRef.current.videoId
   );
@@ -420,43 +436,13 @@ function App() {
 
   // Set up intersection observer for video focus/autoplay (only on mobile devices)
   useEffect(() => {
-    // Only enable autoplay on mobile devices
-    if (isLargeDevice) {
-      setPlayingVideoId(null);
-      setFocusedVideoId(null);
-      return;
+    // Mobile autoplay disabled: only play when user clicks a card.
+    setPlayingVideoId(null);
+    setFocusedVideoId(null);
+    if (videoFocusObserver.current) {
+      videoFocusObserver.current.disconnect();
+      videoFocusObserver.current = null;
     }
-
-    videoFocusObserver.current = new IntersectionObserver(
-      (entries) => {
-        // Find the video that is most in focus (highest intersection ratio)
-        let mostFocusedVideoId: number | null = null;
-        let highestRatio = 0;
-
-        entries.forEach((entry) => {
-          if (entry.isIntersecting && entry.intersectionRatio > highestRatio) {
-            const videoId = parseInt(
-              entry.target.getAttribute("data-video-id") || "0"
-            );
-            highestRatio = entry.intersectionRatio;
-            mostFocusedVideoId = videoId;
-          }
-        });
-
-        // Stop all videos first, then start the most focused video
-        if (mostFocusedVideoId && highestRatio >= 0.55) {
-          setPlayingVideoId(mostFocusedVideoId);
-          setFocusedVideoId(mostFocusedVideoId);
-        } else {
-          setPlayingVideoId(null);
-          setFocusedVideoId(null);
-        }
-      },
-      {
-        threshold: [0.1, 0.3, 0.5, 0.7, 0.9], // Multiple thresholds for better detection
-        rootMargin: "-10% 0px -10% 0px", // Only trigger when video is in center 80% of viewport
-      }
-    );
 
     return () => {
       if (videoFocusObserver.current) {
@@ -464,14 +450,6 @@ function App() {
       }
     };
   }, [videos, isLargeDevice]);
-
-  // Ensure first video starts automatically on small devices at page load.
-  useEffect(() => {
-    if (!isLargeDevice && videos.length > 0 && playingVideoId === null) {
-      setPlayingVideoId(videos[0].id);
-      setFocusedVideoId(videos[0].id);
-    }
-  }, [videos, isLargeDevice, playingVideoId]);
 
   // Add scroll event listener as backup for infinite scrolling with snap scrolling
   useEffect(() => {

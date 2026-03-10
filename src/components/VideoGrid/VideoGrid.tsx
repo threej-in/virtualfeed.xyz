@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { Grid, Box, Typography, Button } from '@mui/material';
 import { Home as HomeIcon } from '@mui/icons-material';
 import VideoCard from '../VideoCard/VideoCard';
@@ -19,11 +19,6 @@ interface VideoGridProps {
 }
 
 const VideoGrid: React.FC<VideoGridProps> = ({ videos, onVideoClick, lastVideoRef, onResetFilters, playingVideoId, focusedVideoId, videoFocusObserver, isLargeDevice, onDesktopVideoHoverStart, onDesktopVideoHoverEnd }) => {
-    const desktopRailRef = useRef<HTMLDivElement | null>(null);
-    const isDraggingRef = useRef(false);
-    const dragStartXRef = useRef(0);
-    const dragStartScrollLeftRef = useRef(0);
-
     // Cleanup observers when videos change
     useEffect(() => {
         const observer = videoFocusObserver?.current;
@@ -33,59 +28,6 @@ const VideoGrid: React.FC<VideoGridProps> = ({ videos, onVideoClick, lastVideoRe
             }
         };
     }, [videos, videoFocusObserver]);
-
-    // Desktop only: convert mouse wheel vertical gesture into horizontal rail scroll.
-    useEffect(() => {
-        if (!isLargeDevice || !desktopRailRef.current) return;
-
-        const rail = desktopRailRef.current;
-        const onWheel = (event: WheelEvent) => {
-            if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
-            event.preventDefault();
-            rail.scrollLeft += event.deltaY;
-        };
-
-        rail.addEventListener('wheel', onWheel, { passive: false });
-        return () => {
-            rail.removeEventListener('wheel', onWheel as EventListener);
-        };
-    }, [isLargeDevice, videos.length]);
-
-    useEffect(() => {
-        if (!isLargeDevice || !desktopRailRef.current) return;
-        const rail = desktopRailRef.current;
-
-        const onMouseDown = (event: MouseEvent) => {
-            if (event.button !== 0) return;
-            isDraggingRef.current = true;
-            dragStartXRef.current = event.clientX;
-            dragStartScrollLeftRef.current = rail.scrollLeft;
-            rail.style.cursor = 'grabbing';
-        };
-
-        const onMouseMove = (event: MouseEvent) => {
-            if (!isDraggingRef.current) return;
-            const deltaX = event.clientX - dragStartXRef.current;
-            rail.scrollLeft = dragStartScrollLeftRef.current - deltaX;
-        };
-
-        const stopDragging = () => {
-            isDraggingRef.current = false;
-            rail.style.cursor = 'grab';
-        };
-
-        rail.addEventListener('mousedown', onMouseDown);
-        window.addEventListener('mousemove', onMouseMove);
-        window.addEventListener('mouseup', stopDragging);
-        rail.addEventListener('mouseleave', stopDragging);
-
-        return () => {
-            rail.removeEventListener('mousedown', onMouseDown);
-            window.removeEventListener('mousemove', onMouseMove);
-            window.removeEventListener('mouseup', stopDragging);
-            rail.removeEventListener('mouseleave', stopDragging);
-        };
-    }, [isLargeDevice, videos.length]);
 
     // Show empty state when there are no videos
     if (!videos || videos.length === 0) {
@@ -150,24 +92,21 @@ const VideoGrid: React.FC<VideoGridProps> = ({ videos, onVideoClick, lastVideoRe
         );
     }
     
-    // Desktop: horizontal scroll with 2 rows.
+    // Desktop: YouTube-like vertical feed grid.
     if (isLargeDevice) {
         return (
             <Box
-                ref={desktopRailRef}
                 sx={{
                     width: '100%',
                     maxWidth: '100%',
                     height: '100%',
-                    overflowX: 'auto',
-                    overflowY: 'hidden',
+                    overflowX: 'hidden',
+                    overflowY: 'auto',
                     px: 1.5,
                     py: 1,
                     scrollBehavior: 'smooth',
-                    cursor: 'grab',
-                    userSelect: 'none',
                     '&::-webkit-scrollbar': {
-                        height: '10px',
+                        width: '10px',
                     },
                     '&::-webkit-scrollbar-thumb': {
                         backgroundColor: 'rgba(255,255,255,0.22)',
@@ -178,14 +117,10 @@ const VideoGrid: React.FC<VideoGridProps> = ({ videos, onVideoClick, lastVideoRe
                 <Box
                     sx={{
                         display: 'grid',
-                        gridAutoFlow: 'column',
-                        gridTemplateRows: 'repeat(2, minmax(0, 1fr))',
-                        gridAutoColumns: '320px',
-                        gap: 1.5,
-                        height: '100%',
-                        width: 'max-content',
-                        alignContent: 'stretch',
-                        alignItems: 'stretch',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+                        gap: 2,
+                        alignContent: 'start',
+                        alignItems: 'start',
                     }}
                 >
                     {videos.map((video, index) => (
@@ -196,7 +131,7 @@ const VideoGrid: React.FC<VideoGridProps> = ({ videos, onVideoClick, lastVideoRe
                                     lastVideoRef?.(node as HTMLDivElement | null);
                                 }
                             }}
-                            sx={{ minWidth: 0, width: '100%', height: '100%', display: 'flex' }}
+                            sx={{ minWidth: 0, width: '100%', display: 'flex' }}
                         >
                             {video.platform === 'youtube' ? (
                                 <YouTubeVideoCard
@@ -233,39 +168,32 @@ const VideoGrid: React.FC<VideoGridProps> = ({ videos, onVideoClick, lastVideoRe
                 width: '100%',
                 maxWidth: { xs: '100%', sm: '1100px' },
                 margin: '0 auto',
-                py: 0,
-                px: { xs: 0, sm: 1 },
-                height: '100vh',
+                py: { xs: 0.5, sm: 1 },
+                px: { xs: 0.5, sm: 1 },
+                height: '100%',
                 overflowY: 'auto',
-                scrollSnapType: 'y mandatory',
                 scrollBehavior: 'smooth',
             }}
         >
             <Grid 
                 container 
-                spacing={{ xs: 0, sm: 1.5 }}
+                spacing={{ xs: 1, sm: 1.5 }}
                 justifyContent="center"
             >
                 {videos.map((video, index) => (
                     <Grid 
                         item 
-                        xs={12} 
-                        sm={3.5} 
+                        xs={6} 
+                        sm={6} 
                         key={video.id}
                         ref={(node) => {
                             if (index === videos.length - 1) {
                                 lastVideoRef?.(node);
                             }
-                            if (videoFocusObserver?.current && node) {
-                                node.setAttribute('data-video-id', video.id.toString());
-                                videoFocusObserver.current.observe(node);
-                            }
                         }}
                         sx={{
-                            px: { xs: 0, sm: 1 },
-                            pb: { xs: 0, sm: 1 },
-                            scrollSnapAlign: 'start',
-                            height: '100vh',
+                            px: { xs: 0.5, sm: 1 },
+                            pb: { xs: 0.5, sm: 1 },
                         }}
                     >
                         {video.platform === 'youtube' ? (

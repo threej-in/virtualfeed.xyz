@@ -35,9 +35,9 @@ const StyledCard = styled(Card)(({ theme }) => ({
     },
     // Mobile TikTok-like styling
     [theme.breakpoints.down('sm')]: {
-        borderRadius: 0,
+        borderRadius: '10px',
         height: 'auto',
-        minHeight: '100vh', // Full viewport height minus header
+        minHeight: 'auto',
         '&:hover': {
             transform: 'none',
             boxShadow: 'none'
@@ -319,13 +319,8 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, isFocused = false
                 <Box sx={{
                     position: 'relative',
                     width: '100%',
-                    paddingTop: { xs: '177.78%', md: '56.25%' }, // mobile shorts, desktop 16:9 like YouTube
+                    paddingTop: { xs: '125%', md: '56.25%' }, // mobile compact card, desktop 16:9 like YouTube
                     overflow: 'hidden',
-                    // Mobile: full height
-                    '@media (max-width: 600px)': {
-                        paddingTop: '100vh',
-                        height: '100vh',
-                    },
                 }}>
                     {/* Skeleton overlay */}
                     {imageLoading && (
@@ -521,11 +516,10 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, isFocused = false
             <CardContent sx={{ 
                 p: 1,
                 '&:last-child': { pb: 1 },
-                // Mobile: minimal content area
+                // Mobile: keep compact content area visible
                 '@media (max-width: 600px)': {
-                    p: 0,
-                    '&:last-child': { pb: 0 },
-                    display: 'none', // Hide content area on mobile for TikTok-like experience
+                    p: 1,
+                    '&:last-child': { pb: 1 },
                 }
             }}>
                 <Typography 

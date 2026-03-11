@@ -511,12 +511,14 @@ export class RedditScraper {
         'Accept-Language': 'en-US,en;q=0.9',
         'Accept': 'application/json',
         // Helps access age-gated listings where allowed.
-        'Cookie': 'over18=1'
+        'Cookie': 'over18=1',
+        'Referer': 'https://www.reddit.com/'
     };
 
     private static async fetchRedditJson<T>(url: string): Promise<T> {
         const candidates = [url];
         if (url.includes('https://www.reddit.com/')) {
+            candidates.push(url.replace('https://www.reddit.com/', 'https://api.reddit.com/'));
             candidates.push(url.replace('https://www.reddit.com/', 'https://old.reddit.com/'));
             candidates.push(url.replace('https://www.reddit.com/', 'https://reddit.com/'));
         }

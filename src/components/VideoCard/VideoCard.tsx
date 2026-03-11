@@ -196,19 +196,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, showNsfw = false,
                         tryNextThumbnail(Array.from(new Set(fallbackUrls)), 0);
                     } else if (/^https?:\/\//i.test(video.thumbnailUrl)) {
                         const remoteUrl = (video.thumbnailUrl || '').replace(/&amp;/g, '&');
-                        const img = new Image();
-                        img.onload = () => {
-                            setThumbnailUrl(remoteUrl);
-                            setImageLoading(false);
-                        };
-                        img.onerror = () => {
-                            if (video.platform !== 'reddit') {
-                                const fallbackThumbnail = createFallbackThumbnail(video.title);
-                                setThumbnailUrl(fallbackThumbnail);
-                                setImageLoading(false);
-                                return;
-                            }
-
+                        if (video.platform === 'reddit') {
                             const proxiedThumbnailUrl = getRedditThumbnailProxyUrl(remoteUrl);
                             const proxiedImg = new Image();
                             proxiedImg.onload = () => {
@@ -216,15 +204,36 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, showNsfw = false,
                                 setImageLoading(false);
                             };
                             proxiedImg.onerror = () => {
+                                // Fallback to direct URL if proxy fails.
+                                const directImg = new Image();
+                                directImg.onload = () => {
+                                    setThumbnailUrl(remoteUrl);
+                                    setImageLoading(false);
+                                };
+                                directImg.onerror = () => {
+                                    const fallbackThumbnail = createFallbackThumbnail(video.title);
+                                    setThumbnailUrl(fallbackThumbnail);
+                                    setImageLoading(false);
+                                };
+                                directImg.crossOrigin = 'anonymous';
+                                directImg.src = remoteUrl;
+                            };
+                            proxiedImg.crossOrigin = 'anonymous';
+                            proxiedImg.src = proxiedThumbnailUrl;
+                        } else {
+                            const img = new Image();
+                            img.onload = () => {
+                                setThumbnailUrl(remoteUrl);
+                                setImageLoading(false);
+                            };
+                            img.onerror = () => {
                                 const fallbackThumbnail = createFallbackThumbnail(video.title);
                                 setThumbnailUrl(fallbackThumbnail);
                                 setImageLoading(false);
                             };
-                            proxiedImg.crossOrigin = 'anonymous';
-                            proxiedImg.src = proxiedThumbnailUrl;
-                        };
-                        img.crossOrigin = 'anonymous';
-                        img.src = remoteUrl;
+                            img.crossOrigin = 'anonymous';
+                            img.src = remoteUrl;
+                        }
                     } else {
                         // If no valid thumbnail URL, use SVG fallback
                         const fallbackThumbnail = createFallbackThumbnail(video.title);

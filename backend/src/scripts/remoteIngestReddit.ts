@@ -51,7 +51,35 @@ const fetchRedditJsonWithFallback = async (url: string): Promise<any> => {
   throw lastError;
 };
 
-const postToRemoteIngest = async (post: any, subredditConfig: any): Promise<boolean> => {
+type IngestResult = {
+  ok: boolean;
+  status: number;
+  message?: string;
+};
+
+const hasVideoSignal = (post: any): boolean => {
+  const url = typeof post?.url === 'string' ? post.url : '';
+  const hasRedditVideo = Boolean(post?.media?.reddit_video || post?.secure_media?.reddit_video);
+  const hasPreviewVideo = Boolean(post?.preview?.reddit_video_preview);
+  const hasGalleryVideo =
+    Array.isArray(post?.gallery_data?.items) &&
+    post.gallery_data.items.some((item: any) => {
+      const mediaId = item?.media_id;
+      const meta = mediaId ? post?.media_metadata?.[mediaId] : null;
+      const candidate = meta?.s?.mp4 || meta?.s?.u;
+      return typeof candidate === 'string' && /\.(mp4|webm)(\?|$)/i.test(candidate);
+    });
+
+  return Boolean(
+    post?.is_video ||
+    hasRedditVideo ||
+    hasPreviewVideo ||
+    hasGalleryVideo ||
+    /v\.redd\.it|\.mp4(\?|$)|\.webm(\?|$)/i.test(url)
+  );
+};
+
+const postToRemoteIngest = async (post: any, subredditConfig: any): Promise<IngestResult> => {
   try {
     const response = await axios.post(
       REMOTE_INGEST_URL,
@@ -75,9 +103,16 @@ const postToRemoteIngest = async (post: any, subredditConfig: any): Promise<bool
       }
     );
 
-    return response.status >= 200 && response.status < 300 && Boolean(response.data?.success);
-  } catch {
-    return false;
+    const ok = response.status >= 200 && response.status < 300 && Boolean(response.data?.success);
+    return {
+      ok,
+      status: response.status,
+      message: response.data?.message || response.data?.error || ''
+    };
+  } catch (error: any) {
+    const code = error?.code || 'unknown_code';
+    const message = error?.message || 'network_error';
+    return { ok: false, status: 0, message: `network_error:${code}:${message}` };
   }
 };
 
@@ -112,6 +147,7 @@ const run = async (): Promise<void> => {
         const items = mapListingChildren(json);
         for (const item of items) {
           if (!item?.id || seen.has(item.id)) continue;
+          if (!hasVideoSignal(item)) continue;
           seen.add(item.id);
           posts.push(item);
         }
@@ -125,16 +161,27 @@ const run = async (): Promise<void> => {
 
     totalFetched += posts.length;
     let subredditIngested = 0;
+    const failCounts: Record<string, number> = {};
     for (const post of posts) {
-      const ok = await postToRemoteIngest(post, subredditConfig);
-      if (ok) {
+      const result = await postToRemoteIngest(post, subredditConfig);
+      if (result.ok) {
         totalIngested += 1;
         subredditIngested += 1;
+      } else {
+        const key = `${result.status}:${result.message || 'unknown'}`;
+        failCounts[key] = (failCounts[key] || 0) + 1;
       }
       await delay(POST_DELAY_MS);
     }
 
     console.log(`[remote-ingest] r/${subredditName}: fetched=${posts.length}, ingested=${subredditIngested}`);
+    const failEntries = Object.entries(failCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    if (failEntries.length > 0) {
+      console.log(`[remote-ingest] r/${subredditName} top failures:`);
+      for (const [reason, count] of failEntries) {
+        console.log(`  - ${reason} x${count}`);
+      }
+    }
   }
 
   console.log(`[remote-ingest] completed fetched=${totalFetched}, ingested=${totalIngested}`);
@@ -144,4 +191,3 @@ run().catch((error) => {
   console.error('[remote-ingest] failed', error);
   process.exit(1);
 });
-

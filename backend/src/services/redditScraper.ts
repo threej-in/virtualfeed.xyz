@@ -222,8 +222,18 @@ export class RedditScraper {
         throw lastError;
     }
 
-    private static async processPost(post: any, subredditConfig: SubredditConfig, isManualSubmission: boolean = false): Promise<boolean> {
+    private static async processPost(
+        post: any,
+        subredditConfig: SubredditConfig,
+        isManualSubmission: boolean = false,
+        rejectReason?: { reason?: string }
+    ): Promise<boolean> {
         try {
+            const reject = (reason: string): false => {
+                if (rejectReason) rejectReason.reason = reason;
+                return false;
+            };
+
             const postTitle = typeof post?.title === 'string' ? post.title : '';
             const subredditName = this.getPostSubredditName(post);
 
@@ -232,8 +242,7 @@ export class RedditScraper {
 
             // Check if post has minimum score (more lenient now)
             if (post.score < subredditConfig.minScore) {
-                // 
-                return false;
+                return reject(`score_below_min:${post.score}<${subredditConfig.minScore}`);
             }
             
             // For AI-focused subreddits, we don't need strict keyword-gating.
@@ -256,7 +265,7 @@ export class RedditScraper {
                     
                     if (!hasAITerm) {
                         logger.info(`Manual submission rejected: No AI-related terms found in title/description`);
-                        return false;
+                        return reject('manual_submission_missing_ai_term');
                     }
                 } else {
                     // STRICT FILTERING: Require at least one primary AI term AND one secondary term
@@ -280,7 +289,7 @@ export class RedditScraper {
                     // Only accept posts that have both a primary AI term AND a secondary term
                     if (!(hasPrimaryTerm && hasSecondaryTerm)) {
                         logger.info(`Skipping post: Insufficient AI-related terms in title/description - Primary: ${hasPrimaryTerm}, Secondary: ${hasSecondaryTerm}`);
-                        return false;
+                        return reject(`missing_ai_terms:primary=${hasPrimaryTerm},secondary=${hasSecondaryTerm}`);
                     }
                     
                     // Additional check: Ensure the primary AI term is actually referring to AI generation, not just mentioning AI
@@ -299,7 +308,7 @@ export class RedditScraper {
                     
                     if (!hasAIGenerationPattern) {
                         logger.info(`Skipping post: No clear AI generation pattern found in title/description`);
-                        return false;
+                        return reject('missing_ai_generation_pattern');
                     }
                 }
             }
@@ -309,8 +318,7 @@ export class RedditScraper {
                 const postText = `${postTitle} ${post.selftext || ''}`.toLowerCase();
                 const hasExcludedTerm = subredditConfig.excludeTerms.some(term => postText.includes(term.toLowerCase()));
                 if (hasExcludedTerm) {
-                    // 
-                    return false;
+                    return reject('excluded_term_match');
                 }
             }
 
@@ -336,21 +344,20 @@ export class RedditScraper {
             }
             // Check for external video platforms
             else if (post.media?.type === 'youtube.com' || post.url?.includes('youtube.com') || post.url?.includes('youtu.be')) {
-                
-                return false;
+                return reject('external_youtube_not_supported_here');
             }
 
             if (!videoId) {
                 videoId = this.getRedditVideoIdFromUrl(videoUrl);
             }
             if (!videoUrl) {
-                return false;
+                return reject('no_video_url_detected');
             }
 
             // Validate video URL
             const videoMetadata = await VideoProcessor.validateVideo(videoUrl);
             if (!videoMetadata) {
-                return false;
+                return reject('video_validation_failed');
             }
 
             // Prefer Reddit-provided preview thumbnails to avoid ffmpeg failures.
@@ -362,7 +369,7 @@ export class RedditScraper {
 
             if (videoMetadata.url.includes('v.redd.it') && videoId) {
                 // Do not rely on ffmpeg for v.redd.it thumbnails; keep only Reddit-provided previews.
-                if (!thumbnailUrl) return false;
+                if (!thumbnailUrl) return reject('missing_reddit_thumbnail');
             } else {
                 // For non-Reddit videos, use the standard method
                 if (!thumbnailUrl) {
@@ -377,7 +384,7 @@ export class RedditScraper {
 
             // Skip rows with no usable thumbnail.
             if (!thumbnailUrl || !(thumbnailUrl.startsWith('/thumbnails/') || /^https?:\/\//i.test(thumbnailUrl))) {
-                return false;
+                return reject('invalid_or_missing_thumbnail');
             }
 
             // Extract tags - create simple tags from title and subreddit if extractTags not available
@@ -468,7 +475,7 @@ export class RedditScraper {
                         return true;
                     } else {
                         // Skip this video as we already have it with equal or higher upvotes
-                        return false;
+                        return reject('duplicate_with_higher_or_equal_score');
                     }
                 }
                 
@@ -482,7 +489,7 @@ export class RedditScraper {
                 return true;
             } catch (error) {
                 logger.error(`Failed to save video to database: ${post.title} (${post.id})`, error);
-                return false; // Skip this video but continue processing others
+                return reject('database_save_failed'); // Skip this video but continue processing others
             }
         } catch (error) {
             logger.error(`Error processing post: ${post.id}`, {
@@ -496,6 +503,7 @@ export class RedditScraper {
                     url: post.url
                 }
             });
+            if (rejectReason) rejectReason.reason = 'exception_during_processing';
             return false;
         }
     }
@@ -879,7 +887,8 @@ export class RedditScraper {
             }
 
             // Process the post using existing logic
-            const processed = await RedditScraper.processPost(post, subredditConfig, true); // true = manual submission
+            const rejectReason: { reason?: string } = {};
+            const processed = await RedditScraper.processPost(post, subredditConfig, true, rejectReason); // true = manual submission
             
             if (processed) {
                 // Find the newly created video
@@ -895,7 +904,7 @@ export class RedditScraper {
             } else {
                 return { 
                     success: false, 
-                    error: 'This video does not appear to be AI-generated content. Please submit videos that are clearly created using AI tools like Stable Diffusion, Midjourney, DALL-E, or other AI generation platforms.' 
+                    error: rejectReason.reason || 'This video does not appear to be AI-generated content. Please submit videos that are clearly created using AI tools like Stable Diffusion, Midjourney, DALL-E, or other AI generation platforms.'
                 };
             }
 
@@ -930,9 +939,10 @@ export class RedditScraper {
                 aiFocused: Boolean(subredditConfigInput?.aiFocused)
             };
 
-            const processed = await this.processPost(post, subredditConfig, false);
+            const rejectReason: { reason?: string } = {};
+            const processed = await this.processPost(post, subredditConfig, false, rejectReason);
             if (!processed) {
-                return { success: false, error: 'Post did not pass processing filters or save checks' };
+                return { success: false, error: rejectReason.reason || 'Post did not pass processing filters or save checks' };
             }
             return { success: true };
         } catch (error: any) {

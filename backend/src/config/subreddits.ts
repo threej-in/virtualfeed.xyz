@@ -25,7 +25,6 @@ const coreAISubreddits = [
   "aivideo",
   "aivideos",
   "aihub",
-  "AIGeneratedContent",
   "aiArt",
   "NanoBanana",
   "Veo3",

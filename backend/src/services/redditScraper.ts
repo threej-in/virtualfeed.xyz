@@ -200,6 +200,31 @@ export class RedditScraper {
         return null;
     }
 
+    private static getPreviewPlayableVideoUrl(post: any): string | null {
+        const asAny = post as any;
+        const candidates = [
+            asAny?.preview?.reddit_video_preview?.fallback_url,
+            asAny?.crosspost_parent_list?.[0]?.preview?.reddit_video_preview?.fallback_url,
+            asAny?.preview?.images?.[0]?.variants?.mp4?.source?.url,
+            asAny?.crosspost_parent_list?.[0]?.preview?.images?.[0]?.variants?.mp4?.source?.url
+        ];
+
+        for (const candidate of candidates) {
+            const decoded = this.decodeRedditUrl(candidate as string | undefined);
+            if (!decoded) continue;
+            if (/^https?:\/\//i.test(decoded) && (/\.(mp4|webm)(\?|$)/i.test(decoded) || /format=mp4/i.test(decoded))) {
+                return decoded;
+            }
+        }
+
+        const rawUrl = typeof asAny?.url === 'string' ? asAny.url.trim() : '';
+        if (/^https?:\/\/.+\.gifv(\?|$)/i.test(rawUrl)) {
+            return rawUrl.replace(/\.gifv(\?|$)/i, '.mp4$1');
+        }
+
+        return null;
+    }
+
     private static async fetchWithRetry<T>(label: string, fn: () => Promise<T>, maxAttempts: number = 3): Promise<T> {
         let lastError: any = null;
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -337,13 +362,18 @@ export class RedditScraper {
                 videoId = this.getRedditVideoIdFromUrl(videoUrl);
             } else if ((galleryVideoUrl = this.getGalleryVideoUrl(post) || '')) {
                 videoUrl = galleryVideoUrl;
+            } else {
+                const previewPlayableUrl = this.getPreviewPlayableVideoUrl(post);
+                if (previewPlayableUrl) {
+                    videoUrl = previewPlayableUrl;
+                }
             }
             // Check for direct video links
-            else if (post.url?.match(/\.(mp4|webm)$/i)) {
+            if (!videoUrl && post.url?.match(/\.(mp4|webm)$/i)) {
                 videoUrl = post.url;
             }
             // Check for external video platforms
-            else if (post.media?.type === 'youtube.com' || post.url?.includes('youtube.com') || post.url?.includes('youtu.be')) {
+            else if (!videoUrl && (post.media?.type === 'youtube.com' || post.url?.includes('youtube.com') || post.url?.includes('youtu.be'))) {
                 return reject('external_youtube_not_supported_here');
             }
 

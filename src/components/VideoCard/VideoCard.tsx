@@ -6,7 +6,7 @@ import MovieIcon from '@mui/icons-material/Movie';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import RedditIcon from '@mui/icons-material/Reddit';
 import { Video } from '../../types/Video';
-import { getBackendAssetUrl, getRedditThumbnailProxyUrl } from '../../services/api';
+import { getBackendAssetUrl, getRedditThumbnailProxyUrl, getRedditVideoProxyUrl } from '../../services/api';
 
 interface VideoCardProps {
     video: Video;
@@ -139,6 +139,52 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, showNsfw = false,
             return 'data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22640%22%20height%3D%22360%22%3E%3Crect%20width%3D%22100%25%22%20height%3D%22100%25%22%20fill%3D%22%23121212%22%2F%3E%3C%2Fsvg%3E';
         }
     }, [stripControlChars]);
+
+    const getRedditHoverPreviewUrl = useCallback((): string => {
+        if (video.platform !== 'reddit') return video.videoUrl;
+
+        const parseMeta = (): any => {
+            if (video.metadata && typeof video.metadata === 'object') return video.metadata;
+            if (typeof video.metadata === 'string') {
+                try {
+                    return JSON.parse(video.metadata);
+                } catch {
+                    return {};
+                }
+            }
+            return {};
+        };
+
+        const meta = parseMeta();
+        const cleanup = (value: string) => value.replace(/&amp;/g, '&').trim();
+        const isMp4 = (value: string) => /\.mp4(\?|$)/i.test(value);
+        const extractVideoId = (value: string) => value.match(/v\.redd\.it\/([^/?]+)/i)?.[1] || '';
+
+        const sourceCandidates = Array.isArray(meta?.redditVideoSources?.mp4Candidates)
+            ? meta.redditVideoSources.mp4Candidates
+                .filter((c: any) => typeof c === 'string' && c.trim().length > 0)
+                .map((c: string) => cleanup(c))
+            : [];
+
+        const sourceFallback = typeof meta?.redditVideoSources?.fallbackUrl === 'string'
+            ? cleanup(meta.redditVideoSources.fallbackUrl)
+            : '';
+
+        const explicitMp4 = [sourceFallback, ...sourceCandidates].find((c: string) => isMp4(c));
+        if (explicitMp4) return getRedditVideoProxyUrl(explicitMp4);
+
+        if (typeof video.videoUrl === 'string' && isMp4(video.videoUrl)) {
+            return getRedditVideoProxyUrl(cleanup(video.videoUrl));
+        }
+
+        const seed = `${sourceFallback} ${video.videoUrl || ''}`;
+        const videoId = extractVideoId(seed);
+        if (videoId) {
+            return getRedditVideoProxyUrl(`https://v.redd.it/${videoId}/CMAF_720.mp4`);
+        }
+
+        return video.videoUrl;
+    }, [video]);
     
     const tryNextThumbnail = useCallback((urls: string[], index: number) => {
         if (index >= urls.length) {
@@ -378,7 +424,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, showNsfw = false,
                     {/* Show video when playing, image when not */}
                     {isPlaying ? (
                         <video
-                            src={video.videoUrl}
+                            src={getRedditHoverPreviewUrl()}
                             autoPlay
                             muted
                             loop

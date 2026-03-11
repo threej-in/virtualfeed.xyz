@@ -298,7 +298,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                 url: mp4FallbackUrl,
                 type: 'mp4',
                 isReddit: true,
-                requiresExternalAudio: false,
+                requiresExternalAudio: true,
                 mp4FallbackUrl
             };
         }
@@ -307,7 +307,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                 url: toRedditVideoProxy(sourceFallback),
                 type: 'mp4',
                 isReddit: true,
-                requiresExternalAudio: false,
+                requiresExternalAudio: true,
                 mp4FallbackUrl
             };
         }
@@ -367,7 +367,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
             return { url: cleanedVideoUrl, type: 'hls', isReddit: true, requiresExternalAudio: false, mp4FallbackUrl };
         }
         if (isCmafUrl(cleanedVideoUrl)) {
-            return { url: toRedditVideoProxy(cleanedVideoUrl), type: 'mp4', isReddit: true, requiresExternalAudio: false, mp4FallbackUrl };
+            return { url: toRedditVideoProxy(cleanedVideoUrl), type: 'mp4', isReddit: true, requiresExternalAudio: true, mp4FallbackUrl };
         }
         if (cleanedVideoUrl.includes('v.redd.it')) {
             return {
@@ -822,7 +822,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         const audioElement = audioRef.current;
 
         if (videoElement) {
-            videoElement.muted = isMuted;
+            videoElement.muted = isMuted || hasAudioTrack;
         }
 
         if (!audioElement) {
@@ -1492,7 +1492,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                         playsInline
                                         preload="auto"
                                         autoPlay
-                                        muted={isMuted}
+                                        muted={isMuted || hasAudioTrack}
                                         loop={isLooping}
                                         onTimeUpdate={handleTimeUpdate}
                                         onPlay={() => setIsPlaying(true)}

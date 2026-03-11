@@ -579,24 +579,29 @@ export const fetchRedditUpvotes = async (req: Request, res: Response): Promise<v
         }
 
         try {
-            // Import the Reddit client
-            const { redditClient } = require('../config/reddit');
-            
-            // Fetch the submission from Reddit
-            const submission = await redditClient.getSubmission(redditId).fetch();
-            
-            // Get the current score (upvotes)
-            const upvotes = submission.score;
-            
+            const normalizedId = String(redditId).replace(/^t3_/i, '').trim();
+            const response = await axios.get(
+                `https://www.reddit.com/comments/${normalizedId}.json?raw_json=1`,
+                {
+                    timeout: 15000,
+                    headers: {
+                        'User-Agent': process.env.REDDIT_USER_AGENT || 'web:virtualfeed.xyz:v1.0.0',
+                        'Accept': 'application/json'
+                    }
+                }
+            );
+
+            const upvotes = Number(response?.data?.[0]?.data?.children?.[0]?.data?.score || 0);
+
             // Update the metadata object with the new upvotes value
             const metadata = { ...video.metadata as any, upvotes };
-            
+
             // Update the video record
             await video.update({ metadata });
-            
+
             res.json({ success: true, upvotes, video });
         } catch (redditError) {
-            console.error('Error fetching from Reddit API:', redditError);
+            console.error('Error fetching Reddit JSON score:', redditError);
             res.status(500).json({ message: 'Error fetching upvotes from Reddit' });
         }
     } catch (error) {

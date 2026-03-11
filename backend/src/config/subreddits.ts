@@ -35,6 +35,7 @@ const coreAISubreddits = [
   "KlingAIVideos",
   "AIGeneratedArt",
   "AIImages",
+  "aislop",
 ];
 
 const adultAISubreddits = [

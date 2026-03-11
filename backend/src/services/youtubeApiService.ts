@@ -409,6 +409,10 @@ export class YouTubeApiService {
 
   private static parseDuration(duration: string): string {
     // Parse ISO 8601 duration format (PT1M30S -> 1:30)
+    if (typeof duration !== 'string' || !duration.trim()) {
+      return '0:00';
+    }
+
     const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
     if (!match) return '0:00';
     

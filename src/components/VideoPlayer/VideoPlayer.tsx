@@ -289,25 +289,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
 
         const mp4FallbackUrl = getMp4FallbackUrl();
 
-        if (mp4FallbackUrl && isCmafUrl(mp4FallbackUrl)) {
-            return {
-                url: mp4FallbackUrl,
-                type: 'mp4',
-                isReddit: true,
-                requiresExternalAudio: false,
-                mp4FallbackUrl
-            };
-        }
-
-        if (sourceFallback && isCmafUrl(sourceFallback)) {
-            return {
-                url: sourceFallback,
-                type: 'mp4',
-                isReddit: true,
-                requiresExternalAudio: false,
-                mp4FallbackUrl
-            };
-        }
+        // redditpx-style priority: DASH first (best chance of proper audio),
+        // then HLS, then MP4 fallbacks.
         if (sourceDash) {
             return { url: sourceDash, type: 'dash', isReddit: true, requiresExternalAudio: false, mp4FallbackUrl };
         }
@@ -319,6 +302,24 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         }
         if (sourceFallback && isHlsUrl(sourceFallback)) {
             return { url: sourceFallback, type: 'hls', isReddit: true, requiresExternalAudio: false, mp4FallbackUrl };
+        }
+        if (mp4FallbackUrl && isCmafUrl(mp4FallbackUrl)) {
+            return {
+                url: mp4FallbackUrl,
+                type: 'mp4',
+                isReddit: true,
+                requiresExternalAudio: false,
+                mp4FallbackUrl
+            };
+        }
+        if (sourceFallback && isCmafUrl(sourceFallback)) {
+            return {
+                url: sourceFallback,
+                type: 'mp4',
+                isReddit: true,
+                requiresExternalAudio: false,
+                mp4FallbackUrl
+            };
         }
         if (sourceFallback && isMp4Url(sourceFallback)) {
             return {

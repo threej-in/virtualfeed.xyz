@@ -470,6 +470,10 @@ export class YouTubeScraper {
 
   private static parseDurationToSeconds(duration: string): number {
     // Parse ISO 8601 duration format (PT1M30S -> 90 seconds)
+    if (typeof duration !== 'string' || !duration.trim()) {
+      return 0;
+    }
+
     const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
     if (!match) return 0;
     

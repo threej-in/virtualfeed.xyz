@@ -11,6 +11,7 @@ import { getBackendAssetUrl, getRedditThumbnailProxyUrl } from '../../services/a
 interface VideoCardProps {
     video: Video;
     onClick: () => void;
+    showNsfw?: boolean;
     isFocused?: boolean;
     isPlaying?: boolean;
     isLargeDevice?: boolean;
@@ -82,10 +83,11 @@ const ThumbnailOverlay = styled(Box)(() => ({
     },
 }));
 
-const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, isFocused = false, isPlaying = false, isLargeDevice = false, onHoverStart, onHoverEnd }) => {
+const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, showNsfw = false, isFocused = false, isPlaying = false, isLargeDevice = false, onHoverStart, onHoverEnd }) => {
     const [imageLoading, setImageLoading] = useState(true);
     const [thumbnailUrl, setThumbnailUrl] = useState<string>(video.thumbnailUrl || '');
     const [retryCount, setRetryCount] = useState(0);
+    const [isNsfwHovered, setIsNsfwHovered] = useState(false);
     const maxRetries = 3;
     const imageRef = useRef<HTMLImageElement>(null);
     const cardRef = useRef<HTMLDivElement>(null);
@@ -295,14 +297,23 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, isFocused = false
         }
     };
 
+    useEffect(() => {
+        setIsNsfwHovered(false);
+    }, [video.id, showNsfw]);
+
+    const canHoverUnblurNsfw = showNsfw && video.nsfw;
+    const shouldBlurNsfw = video.nsfw && !(canHoverUnblurNsfw && isNsfwHovered);
+
     return (
         <StyledCard ref={cardRef} title={video.id + ""}>
             <CardActionArea
                 onClick={onClick}
                 onMouseEnter={() => {
+                    if (canHoverUnblurNsfw) setIsNsfwHovered(true);
                     if (isLargeDevice) onHoverStart?.();
                 }}
                 onMouseLeave={() => {
+                    if (canHoverUnblurNsfw) setIsNsfwHovered(false);
                     if (isLargeDevice) onHoverEnd?.();
                 }}
                 sx={{
@@ -370,7 +381,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, isFocused = false
                                 height: '100%',
                                 objectFit: 'cover',
                                 objectPosition: 'center',
-                                filter: video.nsfw ? 'blur(10px)' : 'none',
+                                filter: shouldBlurNsfw ? 'blur(10px)' : 'none',
                             }}
                         />
                     ) : (
@@ -387,7 +398,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, isFocused = false
                                 height: '100%',
                                 objectFit: 'cover',
                                 objectPosition: 'center',
-                                filter: video.nsfw ? 'blur(10px)' : 'none',
+                                filter: shouldBlurNsfw ? 'blur(10px)' : 'none',
                                 transition: 'filter 0.3s ease'
                             }}
                             onLoad={() => setImageLoading(false)}

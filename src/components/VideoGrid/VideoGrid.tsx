@@ -8,6 +8,7 @@ import { Video } from '../../types/Video';
 interface VideoGridProps {
     videos: Video[];
     onVideoClick: (video: Video) => void;
+    showNsfw?: boolean;
     lastVideoRef?: (node: HTMLDivElement | null) => void;
     onResetFilters?: () => void;
     playingVideoId?: number | null;
@@ -18,7 +19,7 @@ interface VideoGridProps {
     onDesktopVideoHoverEnd?: (videoId: number) => void;
 }
 
-const VideoGrid: React.FC<VideoGridProps> = ({ videos, onVideoClick, lastVideoRef, onResetFilters, playingVideoId, focusedVideoId, videoFocusObserver, isLargeDevice, onDesktopVideoHoverStart, onDesktopVideoHoverEnd }) => {
+const VideoGrid: React.FC<VideoGridProps> = ({ videos, onVideoClick, showNsfw = false, lastVideoRef, onResetFilters, playingVideoId, focusedVideoId, videoFocusObserver, isLargeDevice, onDesktopVideoHoverStart, onDesktopVideoHoverEnd }) => {
     // Cleanup observers when videos change
     useEffect(() => {
         const observer = videoFocusObserver?.current;
@@ -147,6 +148,7 @@ const VideoGrid: React.FC<VideoGridProps> = ({ videos, onVideoClick, lastVideoRe
                                 <VideoCard
                                     video={video}
                                     onClick={() => onVideoClick(video)}
+                                    showNsfw={showNsfw}
                                     isFocused={focusedVideoId === video.id}
                                     isPlaying={playingVideoId === video.id}
                                     isLargeDevice={true}
@@ -210,6 +212,7 @@ const VideoGrid: React.FC<VideoGridProps> = ({ videos, onVideoClick, lastVideoRe
                             <VideoCard 
                                 video={video} 
                                 onClick={() => onVideoClick(video)} 
+                                showNsfw={showNsfw}
                                 isFocused={focusedVideoId === video.id} 
                                 isPlaying={playingVideoId === video.id}
                                 isLargeDevice={false}

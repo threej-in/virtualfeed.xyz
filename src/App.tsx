@@ -42,7 +42,7 @@ const DEFAULT_FILTER_VALUES: AppFilterValues = {
   sortBy: "createdAt",
   order: "desc",
   search: undefined as string | undefined,
-  platform: "",
+  platform: "reddit",
   showNsfw: false,
   trending: undefined,
   language: "all",
@@ -84,7 +84,10 @@ const parseInitialStateFromUrl = (): {
       ? trendingParam
       : undefined;
 
-  const platform = platformParam === "youtube" || platformParam === "reddit" ? platformParam : "";
+  const platform =
+    platformParam === "youtube" || platformParam === "reddit"
+      ? platformParam
+      : DEFAULT_FILTER_VALUES.platform;
   const language = languageParam && languageParam.trim() ? languageParam.trim() : "all";
   const search = searchParam && searchParam.trim() ? searchParam.trim() : undefined;
   const showNsfw =
@@ -761,6 +764,7 @@ function App() {
                   setFilterValues({
                     ...DEFAULT_FILTER_VALUES,
                     search: "",
+                    platform: DEFAULT_FILTER_VALUES.platform,
                   });
                   // Reset videos array to trigger a fresh load
                   setVideos([]);
@@ -893,6 +897,7 @@ function App() {
                   <Box sx={{ flex: 1, minHeight: 0, position: "relative" }}>
                     <VideoGrid
                       videos={videos}
+                      showNsfw={filterValues.showNsfw}
                       onVideoClick={(video) => {
                         if (isLargeDevice) {
                           // On large devices, always use popup for both YouTube and Reddit videos
@@ -973,7 +978,7 @@ function App() {
                         setFilterValues({
                           ...DEFAULT_FILTER_VALUES,
                           search: "",
-                          platform: "", // Show all platforms by default
+                          platform: DEFAULT_FILTER_VALUES.platform,
                         });
                         // Reset videos array to trigger a fresh load
                         setVideos([]);

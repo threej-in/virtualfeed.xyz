@@ -1,9 +1,8 @@
-import { redditClient } from '../config/reddit';
 import { subreddits, SubredditConfig } from '../config/subreddits';
 import { VideoProcessor } from './videoProcessor';
 import { logger } from './logger';
 import Video from '../models/Video';
-import { Submission, Listing } from 'snoowrap';
+import axios from 'axios';
 
 export class RedditScraper {
     private static readonly RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
@@ -20,7 +19,26 @@ export class RedditScraper {
         return url.replace(/&amp;/g, '&').trim();
     }
 
-    private static getPostRedditVideo(post: Submission): any | null {
+    private static getPostSubredditName(post: any): string {
+        const rawSubreddit = post?.subreddit;
+        if (typeof rawSubreddit === 'string' && rawSubreddit.trim()) {
+            return rawSubreddit.trim();
+        }
+
+        const displayName = rawSubreddit?.display_name;
+        if (typeof displayName === 'string' && displayName.trim()) {
+            return displayName.trim();
+        }
+
+        const subredditNamePrefixed = post?.subreddit_name_prefixed;
+        if (typeof subredditNamePrefixed === 'string' && subredditNamePrefixed.trim()) {
+            return subredditNamePrefixed.replace(/^r\//i, '').trim();
+        }
+
+        return 'unknown';
+    }
+
+    private static getPostRedditVideo(post: any): any | null {
         const asAny = post as any;
 
         const direct =
@@ -45,6 +63,21 @@ export class RedditScraper {
         if (!url || typeof url !== 'string') return '';
         const match = url.match(/v\.redd\.it\/([^/?]+)/i);
         return match?.[1] || '';
+    }
+
+    private static normalizeSubmissionId(rawId: unknown): string | null {
+        if (typeof rawId !== 'string') return null;
+        const trimmed = rawId.trim();
+        if (!trimmed) return null;
+
+        // Accept permalink/full URL forms.
+        const fromUrl = trimmed.match(/\/comments\/([a-z0-9]+)\//i)?.[1];
+        const withoutPrefix = (fromUrl || trimmed).replace(/^t3_/i, '');
+
+        if (!/^[a-z0-9]{5,10}$/i.test(withoutPrefix)) {
+            return null;
+        }
+        return withoutPrefix;
     }
 
     private static buildRedditMp4Candidates(videoId: string, querySuffix: string): string[] {
@@ -76,18 +109,19 @@ export class RedditScraper {
         const querySuffix = this.getQuerySuffix(seedUrl);
         const mp4Candidates = this.buildRedditMp4Candidates(videoId, querySuffix);
 
-        // Prefer CMAF MP4 first (redditp/redditpx-style) for stable browser playback.
-        const cmafCandidate = mp4Candidates.find((candidate) => /\/CMAF_\d+\.mp4/i.test(candidate));
-        if (cmafCandidate) {
-            return cmafCandidate;
-        }
-
-        // Prefer adaptive streams first; this is the most reliable playback path.
+        // Prefer adaptive streams first (redditpx-style). DASH manifests usually
+        // expose proper audio+video tracks where direct MP4 URLs can be silent.
         if (dashUrl) {
             return dashUrl;
         }
         if (hlsUrl) {
             return hlsUrl;
+        }
+
+        // Then try direct CMAF MP4 candidates.
+        const cmafCandidate = mp4Candidates.find((candidate) => /\/CMAF_\d+\.mp4/i.test(candidate));
+        if (cmafCandidate) {
+            return cmafCandidate;
         }
 
         if (fallbackUrl && /\/DASH_\d+\.mp4/i.test(fallbackUrl)) {
@@ -96,7 +130,7 @@ export class RedditScraper {
         return mp4Candidates[0] || '';
     }
 
-    private static getGallerySource(post: Submission): any | null {
+    private static getGallerySource(post: any): any | null {
         const asAny = post as any;
         if (asAny?.gallery_data?.items && asAny?.media_metadata) {
             return asAny;
@@ -110,7 +144,7 @@ export class RedditScraper {
         return null;
     }
 
-    private static getGalleryVideoUrl(post: Submission): string | null {
+    private static getGalleryVideoUrl(post: any): string | null {
         const source = this.getGallerySource(post);
         if (!source) return null;
 
@@ -130,7 +164,7 @@ export class RedditScraper {
         return null;
     }
 
-    private static getRedditPreviewThumbnail(post: Submission): string | null {
+    private static getRedditPreviewThumbnail(post: any): string | null {
         const asAny = post as any;
         const redditVideo = this.getPostRedditVideo(post);
         const redditVideoThumbnail = this.decodeRedditUrl(redditVideo?.thumbnail_url as string | undefined);
@@ -187,8 +221,11 @@ export class RedditScraper {
         throw lastError;
     }
 
-    private static async processPost(post: Submission, subredditConfig: SubredditConfig, isManualSubmission: boolean = false): Promise<boolean> {
+    private static async processPost(post: any, subredditConfig: SubredditConfig, isManualSubmission: boolean = false): Promise<boolean> {
         try {
+            const postTitle = typeof post?.title === 'string' ? post.title : '';
+            const subredditName = this.getPostSubredditName(post);
+
             // Log post details for debugging - only at debug level
             // 
 
@@ -203,7 +240,7 @@ export class RedditScraper {
             
             // Check for required search terms (only for non-AI-focused subreddits)
             if (!isAIFocusedSubreddit) {
-                const postText = `${post.title} ${post.selftext || ''} ${post.link_flair_text || ''}`.toLowerCase();
+                const postText = `${postTitle} ${post.selftext || ''} ${post.link_flair_text || ''}`.toLowerCase();
                 
                 // For manual submissions, use more lenient filtering
                 if (isManualSubmission) {
@@ -268,7 +305,7 @@ export class RedditScraper {
 
             // Check for excluded terms
             if (subredditConfig.excludeTerms && subredditConfig.excludeTerms.length > 0) {
-                const postText = `${post.title} ${post.selftext || ''}`.toLowerCase();
+                const postText = `${postTitle} ${post.selftext || ''}`.toLowerCase();
                 const hasExcludedTerm = subredditConfig.excludeTerms.some(term => postText.includes(term.toLowerCase()));
                 if (hasExcludedTerm) {
                     // 
@@ -346,21 +383,21 @@ export class RedditScraper {
             let tags;
             try {
                 // Use the VideoProcessor.extractTags method if available
-                tags = VideoProcessor.extractTags(post.title, post.subreddit.display_name);
+                tags = VideoProcessor.extractTags(postTitle, subredditName);
             } catch (error) {
                 // Fallback tag extraction if the method is not available
                 const tagSet = new Set<string>();
                 
                 // Add subreddit as a tag
-                tagSet.add(post.subreddit.display_name.toLowerCase());
+                tagSet.add(subredditName.toLowerCase());
                 
                 // Add simple word-based tags from title
-                const words = post.title.toLowerCase()
+                const words = postTitle.toLowerCase()
                     .replace(/[^\w\s]/g, ' ')
                     .split(/\s+/)
-                    .filter(word => word.length > 3 && !['with', 'this', 'that', 'from', 'what', 'when', 'where'].includes(word));
+                    .filter((word: string) => word.length > 3 && !['with', 'this', 'that', 'from', 'what', 'when', 'where'].includes(word));
                 
-                words.forEach(word => tagSet.add(word));
+                words.forEach((word: string) => tagSet.add(word));
                 
                 tags = Array.from(tagSet).slice(0, 10);
             }
@@ -395,12 +432,12 @@ export class RedditScraper {
             
             // Prepare video data
             const videoData = {
-                title: post.title,
+                title: postTitle,
                 description: post.selftext || '',
                 videoUrl: videoMetadata.url,
                 thumbnailUrl,
                 redditId: post.id,
-                subreddit: post.subreddit.display_name,
+                subreddit: subredditName,
                 platform: 'reddit',
                 tags,
                 nsfw: isNsfw,
@@ -467,6 +504,96 @@ export class RedditScraper {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
+    private static readonly REDDIT_PUBLIC_HEADERS = {
+        'User-Agent': process.env.REDDIT_USER_AGENT || 'web:virtualfeed.xyz:v1.0.0',
+        'Accept': 'application/json'
+    };
+
+    private static async fetchRedditJson<T>(url: string): Promise<T> {
+        const response = await axios.get<T>(url, {
+            timeout: 15000,
+            headers: this.REDDIT_PUBLIC_HEADERS
+        });
+        return response.data;
+    }
+
+    private static mapListingChildren(listing: any): any[] {
+        const children = listing?.data?.children || [];
+        if (!Array.isArray(children)) return [];
+        return children
+            .map((child: any) => child?.data)
+            .filter((post: any) => post && typeof post.id === 'string');
+    }
+
+    private static async fetchSubmissionByIdJson(submissionId: string): Promise<any | null> {
+        try {
+            const normalized = this.normalizeSubmissionId(submissionId);
+            if (!normalized) return null;
+            const data = await this.fetchWithRetry<any>(
+                `submission json ${normalized}`,
+                () => this.fetchRedditJson<any>(`https://www.reddit.com/comments/${normalized}.json?raw_json=1`)
+            );
+            const post = data?.[0]?.data?.children?.[0]?.data;
+            return post || null;
+        } catch {
+            return null;
+        }
+    }
+
+    private static async fetchSubredditPostsFromJson(
+        subredditName: string,
+        searchTerms: string[]
+    ): Promise<any[]> {
+        const collected: any[] = [];
+        const seen = new Set<string>();
+
+        const pushPosts = (items: any[]) => {
+            for (const post of items) {
+                if (!post?.id || seen.has(post.id)) continue;
+                seen.add(post.id);
+                collected.push(post);
+            }
+        };
+
+        // Search-first by configured terms (like old behavior).
+        for (const term of searchTerms) {
+            const encoded = encodeURIComponent(term);
+            const url = `https://www.reddit.com/r/${subredditName}/search.json?q=${encoded}&restrict_sr=1&sort=new&t=week&limit=40&raw_json=1`;
+            try {
+                const searchJson = await this.fetchWithRetry<any>(
+                    `r/${subredditName} search.json(${term})`,
+                    () => this.fetchRedditJson<any>(url)
+                );
+                pushPosts(this.mapListingChildren(searchJson));
+            } catch (error) {
+                logger.warn(`Search JSON failed for r/${subredditName} term="${term}"`);
+            }
+            await this.delay(700);
+        }
+
+        const listingUrls = [
+            `https://www.reddit.com/r/${subredditName}/new.json?limit=60&raw_json=1`,
+            `https://www.reddit.com/r/${subredditName}/rising.json?limit=40&raw_json=1`,
+            `https://www.reddit.com/r/${subredditName}/hot.json?limit=40&raw_json=1`,
+            `https://www.reddit.com/r/${subredditName}/top.json?t=week&limit=40&raw_json=1`
+        ];
+
+        for (const url of listingUrls) {
+            try {
+                const listing = await this.fetchWithRetry<any>(
+                    `r/${subredditName} listing`,
+                    () => this.fetchRedditJson<any>(url)
+                );
+                pushPosts(this.mapListingChildren(listing));
+            } catch (error) {
+                logger.warn(`Listing JSON failed for r/${subredditName}: ${url}`);
+            }
+            await this.delay(700);
+        }
+
+        return collected;
+    }
+
     private static getSearchTermsForSubreddit(subredditConfig: SubredditConfig): string[] {
         const envTerms = process.env.REDDIT_SEARCH_TERMS
             ?.split(',')
@@ -485,9 +612,9 @@ export class RedditScraper {
         return this.DEFAULT_SEARCH_TERMS;
     }
 
-    private static async getSubredditPosts(subredditConfig: SubredditConfig): Promise<Submission[]> {
+    private static async getSubredditPosts(subredditConfig: SubredditConfig): Promise<any[]> {
         const subredditName = subredditConfig.name;
-        const posts: Submission[] = [];
+        const posts: any[] = [];
         const seenIds = new Set<string>();
         const searchTerms = this.getSearchTermsForSubreddit(subredditConfig);
         
@@ -509,79 +636,20 @@ export class RedditScraper {
             // Continue with empty array if there was an error
         }
 
-        const pushIfNew = (post: Submission) => {
+        const pushIfNew = (post: any) => {
             if (!seenIds.has(post.id) && !existingRedditIds.has(post.id)) {
                 posts.push(post);
                 seenIds.add(post.id);
             }
         };
-        
+
         try {
-            // Check if subreddit exists and is accessible
-            try {
-                const subreddit = redditClient.getSubreddit(subredditName);
-
-                // Search-first ingestion for targeted matching posts.
-                for (const term of searchTerms) {
-                    const searchPosts = await this.fetchWithRetry(
-                        `r/${subredditName} search(${term})`,
-                        () => subreddit.search({
-                            query: term,
-                            sort: 'new',
-                            time: 'week',
-                            limit: 25,
-                            restrictSr: true
-                        } as any) as Promise<Listing<Submission>>
-                    );
-                    for (const post of searchPosts) {
-                        pushIfNew(post);
-                    }
-                    await this.delay(1200);
-                }
-
-                // Fallback listing endpoints to fill gaps.
-                const newPosts = await this.fetchWithRetry(
-                    `r/${subredditName} getNew`,
-                    () => subreddit.getNew({ limit: 30 })
-                );
-                for (const post of newPosts) {
-                    pushIfNew(post);
-                }
-
-                // Add delay between API calls to avoid rate limiting
-                await this.delay(1200);
-
-                const hotPosts = await this.fetchWithRetry(
-                    `r/${subredditName} getHot`,
-                    () => subreddit.getHot({ limit: 15 })
-                );
-                for (const post of hotPosts) {
-                    pushIfNew(post);
-                }
-
-                // Add delay between API calls to avoid rate limiting
-                await this.delay(1200);
-
-                const topPosts = await this.fetchWithRetry(
-                    `r/${subredditName} getTop(week)`,
-                    () => subreddit.getTop({ time: 'week', limit: 15 })
-                );
-                for (const post of topPosts) {
-                    pushIfNew(post);
-                }
-
-            } catch (subredditError: any) {
-                // Check if this is a banned subreddit error
-                if (subredditError.statusCode === 404 && 
-                    subredditError.error && 
-                    subredditError.error.reason === 'banned') {
-                } else {
-                    // Re-throw other errors to be caught by the outer catch block
-                    throw subredditError;
-                }
+            const jsonPosts = await this.fetchSubredditPostsFromJson(subredditName, searchTerms);
+            for (const post of jsonPosts) {
+                pushIfNew(post);
             }
         } catch (error) {
-            logger.error(`Error fetching posts from subreddit: ${subredditName}`, error);
+            logger.error(`Error fetching JSON posts from subreddit: ${subredditName}`, error);
         }
 
         return posts;
@@ -649,13 +717,16 @@ export class RedditScraper {
                     continue;
                 }
 
-                const post: any = await this.fetchWithRetry<any>(
-                    `refresh submission ${video.redditId}`,
-                    () => (redditClient.getSubmission(video.redditId) as any).fetch(),
-                    2
-                );
+                const submissionId = this.normalizeSubmissionId(video.redditId);
+                if (!submissionId) {
+                    await video.update({ blacklisted: true });
+                    logger.warn(`Blacklisting reddit row with invalid redditId: ${video.redditId}`);
+                    continue;
+                }
 
-                const redditVideo = this.getPostRedditVideo(post as Submission);
+                const post: any = await this.fetchSubmissionByIdJson(submissionId);
+
+                const redditVideo = this.getPostRedditVideo(post);
                 if (!post || !redditVideo) {
                     await video.update({ blacklisted: true });
                     continue;
@@ -665,7 +736,7 @@ export class RedditScraper {
                 const dashUrl = this.decodeRedditUrl(redditVideo?.dash_url as string | undefined) || undefined;
                 const hlsUrl = this.decodeRedditUrl(redditVideo?.hls_url as string | undefined) || undefined;
                 const refreshedVideoUrl = this.derivePlayableRedditVideoUrl(redditVideo) || video.videoUrl;
-                const refreshedThumbnailUrl = this.getRedditPreviewThumbnail(post as Submission) || video.thumbnailUrl;
+                const refreshedThumbnailUrl = this.getRedditPreviewThumbnail(post) || video.thumbnailUrl;
 
                 // If we still don't have any playable stream URL, blacklist to avoid dead cards.
                 if (!refreshedVideoUrl) {
@@ -711,7 +782,7 @@ export class RedditScraper {
                 await this.delay(400);
             } catch (error: any) {
                 const statusCode = Number(error?.statusCode || error?.response?.status || 0);
-                if (statusCode === 403 || statusCode === 404) {
+                if (statusCode === 400 || statusCode === 403 || statusCode === 404) {
                     await video.update({ blacklisted: true });
                     continue;
                 }
@@ -737,10 +808,10 @@ export class RedditScraper {
             const [, subredditName, postId] = urlMatch;
             
             // Get the post using Reddit API
-            const post: any = await this.fetchWithRetry<any>(
-                `submission ${postId} fetch`,
-                () => (redditClient.getSubmission(postId) as any).fetch()
-            );
+            const post: any = await this.fetchSubmissionByIdJson(postId);
+            if (!post) {
+                return { success: false, error: 'Could not fetch the Reddit post via public JSON endpoint' };
+            }
             
             // Create a mock subreddit config for processing
             const subredditConfig: SubredditConfig = {
@@ -765,7 +836,7 @@ export class RedditScraper {
             }
 
             // Process the post using existing logic
-            const processed = await RedditScraper.processPost(post as Submission, subredditConfig, true); // true = manual submission
+            const processed = await RedditScraper.processPost(post, subredditConfig, true); // true = manual submission
             
             if (processed) {
                 // Find the newly created video

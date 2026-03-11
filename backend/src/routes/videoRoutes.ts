@@ -12,8 +12,10 @@ import {
 } from '../controllers/videoController';
 import { RedditScraper } from '../services/redditScraper';
 import { logger } from '../services/logger';
+import { SubredditConfig } from '../config/subreddits';
 
 const router: Router = express.Router();
+const INGEST_SECRET = process.env.INGEST_SECRET || process.env.SECURE_ACTION_SECRET || '';
 
 // Submit a new video from Reddit URL
 router.post('/submit', async (req: any, res: any) => {
@@ -82,5 +84,47 @@ router.get('/:id/reddit-upvotes', fetchRedditUpvotes);
 // Example usage: /api/videos/123/secure-action?action=nsfw&secret=your-secret-code
 // Example usage: /api/videos/123/secure-action?action=delete&secret=your-secret-code
 router.get('/:id/secure-action', secureVideoAction);
+
+// Secure remote ingest route (for local scraper worker posting to server)
+router.post('/ingest/reddit-post', async (req: any, res: any) => {
+  try {
+    const providedSecret = req.headers['x-ingest-secret'] || req.body?.secret;
+    if (!INGEST_SECRET || providedSecret !== INGEST_SECRET) {
+      return res.status(401).json({
+        success: false,
+        message: 'Unauthorized ingest request'
+      });
+    }
+
+    const post = req.body?.post;
+    const subredditConfig = req.body?.subredditConfig as Partial<SubredditConfig> | undefined;
+
+    if (!post || typeof post !== 'object') {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing or invalid post payload'
+      });
+    }
+
+    const result = await RedditScraper.ingestRawPost(post, subredditConfig);
+    if (!result.success) {
+      return res.status(422).json({
+        success: false,
+        message: result.error || 'Post was not ingested'
+      });
+    }
+
+    return res.json({ success: true });
+  } catch (error) {
+    logger.error('Error in remote reddit ingest route:', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
 
 export default router;

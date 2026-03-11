@@ -907,4 +907,36 @@ export class RedditScraper {
             };
         }
     }
+
+    static async ingestRawPost(
+        post: any,
+        subredditConfigInput?: Partial<SubredditConfig>
+    ): Promise<{ success: boolean; error?: string }> {
+        try {
+            if (!post || typeof post !== 'object') {
+                return { success: false, error: 'Invalid post payload' };
+            }
+
+            const subredditName =
+                (typeof subredditConfigInput?.name === 'string' && subredditConfigInput.name.trim())
+                    ? subredditConfigInput.name.trim()
+                    : this.getPostSubredditName(post);
+
+            const subredditConfig: SubredditConfig = {
+                name: subredditName || 'unknown',
+                minScore: Number(subredditConfigInput?.minScore ?? 1),
+                excludeTerms: Array.isArray(subredditConfigInput?.excludeTerms) ? subredditConfigInput!.excludeTerms! : [],
+                searchTerms: Array.isArray(subredditConfigInput?.searchTerms) ? subredditConfigInput!.searchTerms! : [],
+                aiFocused: Boolean(subredditConfigInput?.aiFocused)
+            };
+
+            const processed = await this.processPost(post, subredditConfig, false);
+            if (!processed) {
+                return { success: false, error: 'Post did not pass processing filters or save checks' };
+            }
+            return { success: true };
+        } catch (error: any) {
+            return { success: false, error: error?.message || 'Unknown ingestion error' };
+        }
+    }
 }

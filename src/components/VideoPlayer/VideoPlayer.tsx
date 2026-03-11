@@ -219,7 +219,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         const getQuerySuffix = (value: string) => (value.includes('?') ? value.substring(value.indexOf('?')) : '');
         const buildMp4Candidates = (videoId: string, querySuffix: string): string[] => {
             if (!videoId) return [];
-            const suffixes = querySuffix ? [querySuffix, ''] : [''];
+            // Prefer unsigned URLs first; signed query params (?a=...) expire frequently.
+            const suffixes = querySuffix ? ['', querySuffix] : [''];
             const candidates: string[] = [];
             for (const suffix of suffixes) {
                 candidates.push(

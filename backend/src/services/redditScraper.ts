@@ -5,7 +5,7 @@ import Video from '../models/Video';
 import axios from 'axios';
 
 export class RedditScraper {
-    private static readonly RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
+    private static readonly RETRYABLE_STATUS_CODES = new Set([403, 429, 500, 502, 503, 504]);
     private static readonly DEFAULT_SEARCH_TERMS = [
         'ai video',
         'generated video',
@@ -82,7 +82,8 @@ export class RedditScraper {
 
     private static buildRedditMp4Candidates(videoId: string, querySuffix: string): string[] {
         if (!videoId) return [];
-        const suffixes = querySuffix ? [querySuffix, ''] : [''];
+        // Prefer unsigned candidates first; signed query params can expire.
+        const suffixes = querySuffix ? ['', querySuffix] : [''];
         const candidates: string[] = [];
         for (const suffix of suffixes) {
             candidates.push(
@@ -505,16 +506,34 @@ export class RedditScraper {
     }
 
     private static readonly REDDIT_PUBLIC_HEADERS = {
-        'User-Agent': process.env.REDDIT_USER_AGENT || 'web:virtualfeed.xyz:v1.0.0',
+        // Reddit expects a descriptive UA. Keep env override, otherwise use policy-compliant default.
+        'User-Agent': process.env.REDDIT_USER_AGENT || 'web:virtualfeed.xyz:v1.0.0 (by /u/virtualfeed)',
+        'Accept-Language': 'en-US,en;q=0.9',
         'Accept': 'application/json'
     };
 
     private static async fetchRedditJson<T>(url: string): Promise<T> {
-        const response = await axios.get<T>(url, {
-            timeout: 15000,
-            headers: this.REDDIT_PUBLIC_HEADERS
-        });
-        return response.data;
+        const candidates = [url];
+        if (url.includes('https://www.reddit.com/')) {
+            candidates.push(url.replace('https://www.reddit.com/', 'https://old.reddit.com/'));
+        }
+
+        let lastError: any = null;
+
+        for (const candidate of candidates) {
+            try {
+                const response = await axios.get<T>(candidate, {
+                    timeout: 15000,
+                    maxRedirects: 5,
+                    headers: this.REDDIT_PUBLIC_HEADERS
+                });
+                return response.data;
+            } catch (error: any) {
+                lastError = error;
+            }
+        }
+
+        throw lastError;
     }
 
     private static mapListingChildren(listing: any): any[] {
@@ -566,7 +585,9 @@ export class RedditScraper {
                 );
                 pushPosts(this.mapListingChildren(searchJson));
             } catch (error) {
-                logger.warn(`Search JSON failed for r/${subredditName} term="${term}"`);
+                const statusCode = Number((error as any)?.statusCode || (error as any)?.response?.status || 0);
+                const message = (error as any)?.message || 'unknown_error';
+                logger.warn(`Search JSON failed for r/${subredditName} term="${term}"`, { statusCode, message });
             }
             await this.delay(700);
         }
@@ -586,7 +607,9 @@ export class RedditScraper {
                 );
                 pushPosts(this.mapListingChildren(listing));
             } catch (error) {
-                logger.warn(`Listing JSON failed for r/${subredditName}: ${url}`);
+                const statusCode = Number((error as any)?.statusCode || (error as any)?.response?.status || 0);
+                const message = (error as any)?.message || 'unknown_error';
+                logger.warn(`Listing JSON failed for r/${subredditName}: ${url}`, { statusCode, message });
             }
             await this.delay(700);
         }
@@ -595,6 +618,12 @@ export class RedditScraper {
     }
 
     private static getSearchTermsForSubreddit(subredditConfig: SubredditConfig): string[] {
+        // AI-focused subreddits already contain relevant content by definition.
+        // Skip keyword search to reduce request volume/failures and use listing feeds only.
+        if (subredditConfig.aiFocused) {
+            return [];
+        }
+
         const envTerms = process.env.REDDIT_SEARCH_TERMS
             ?.split(',')
             .map(term => term.trim())

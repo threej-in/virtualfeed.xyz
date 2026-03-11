@@ -509,13 +509,16 @@ export class RedditScraper {
         // Reddit expects a descriptive UA. Keep env override, otherwise use policy-compliant default.
         'User-Agent': process.env.REDDIT_USER_AGENT || 'web:virtualfeed.xyz:v1.0.0 (by /u/virtualfeed)',
         'Accept-Language': 'en-US,en;q=0.9',
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        // Helps access age-gated listings where allowed.
+        'Cookie': 'over18=1'
     };
 
     private static async fetchRedditJson<T>(url: string): Promise<T> {
         const candidates = [url];
         if (url.includes('https://www.reddit.com/')) {
             candidates.push(url.replace('https://www.reddit.com/', 'https://old.reddit.com/'));
+            candidates.push(url.replace('https://www.reddit.com/', 'https://reddit.com/'));
         }
 
         let lastError: any = null;
@@ -561,10 +564,12 @@ export class RedditScraper {
 
     private static async fetchSubredditPostsFromJson(
         subredditName: string,
-        searchTerms: string[]
+        searchTerms: string[],
+        enableSearch: boolean
     ): Promise<any[]> {
         const collected: any[] = [];
         const seen = new Set<string>();
+        const perRequestDelayMs = Number(process.env.REDDIT_REQUEST_DELAY_MS || 1200);
 
         const pushPosts = (items: any[]) => {
             for (const post of items) {
@@ -575,21 +580,24 @@ export class RedditScraper {
         };
 
         // Search-first by configured terms (like old behavior).
-        for (const term of searchTerms) {
-            const encoded = encodeURIComponent(term);
-            const url = `https://www.reddit.com/r/${subredditName}/search.json?q=${encoded}&restrict_sr=1&sort=new&t=week&limit=40&raw_json=1`;
-            try {
-                const searchJson = await this.fetchWithRetry<any>(
-                    `r/${subredditName} search.json(${term})`,
-                    () => this.fetchRedditJson<any>(url)
-                );
-                pushPosts(this.mapListingChildren(searchJson));
-            } catch (error) {
-                const statusCode = Number((error as any)?.statusCode || (error as any)?.response?.status || 0);
-                const message = (error as any)?.message || 'unknown_error';
-                logger.warn(`Search JSON failed for r/${subredditName} term="${term}"`, { statusCode, message });
+        if (enableSearch) {
+            // Search-first by configured terms (like old behavior).
+            for (const term of searchTerms) {
+                const encoded = encodeURIComponent(term);
+                const url = `https://www.reddit.com/r/${subredditName}/search.json?q=${encoded}&restrict_sr=1&sort=new&t=week&limit=40&raw_json=1`;
+                try {
+                    const searchJson = await this.fetchWithRetry<any>(
+                        `r/${subredditName} search.json(${term})`,
+                        () => this.fetchRedditJson<any>(url)
+                    );
+                    pushPosts(this.mapListingChildren(searchJson));
+                } catch (error) {
+                    const statusCode = Number((error as any)?.statusCode || (error as any)?.response?.status || 0);
+                    const message = (error as any)?.message || 'unknown_error';
+                    logger.warn(`Search JSON failed for r/${subredditName} term="${term}"`, { statusCode, message });
+                }
+                await this.delay(perRequestDelayMs);
             }
-            await this.delay(700);
         }
 
         const listingUrls = [
@@ -611,7 +619,7 @@ export class RedditScraper {
                 const message = (error as any)?.message || 'unknown_error';
                 logger.warn(`Listing JSON failed for r/${subredditName}: ${url}`, { statusCode, message });
             }
-            await this.delay(700);
+            await this.delay(perRequestDelayMs);
         }
 
         return collected;
@@ -673,7 +681,11 @@ export class RedditScraper {
         };
 
         try {
-            const jsonPosts = await this.fetchSubredditPostsFromJson(subredditName, searchTerms);
+            const jsonPosts = await this.fetchSubredditPostsFromJson(
+                subredditName,
+                searchTerms,
+                !subredditConfig.aiFocused
+            );
             for (const post of jsonPosts) {
                 pushIfNew(post);
             }

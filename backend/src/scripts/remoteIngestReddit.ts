@@ -9,6 +9,7 @@ const INGEST_SECRET = process.env.INGEST_SECRET || process.env.SECURE_ACTION_SEC
 const USER_AGENT = process.env.REDDIT_USER_AGENT || 'web:virtualfeed.xyz:v1.0.0 (by /u/virtualfeed)';
 const REQUEST_DELAY_MS = Number(process.env.REDDIT_REQUEST_DELAY_MS || 1200);
 const POST_DELAY_MS = Number(process.env.REMOTE_INGEST_POST_DELAY_MS || 150);
+const FAIL_FAST_ON_429 = (process.env.REDDIT_FAIL_FAST_ON_429 || 'true').toLowerCase() === 'true';
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -155,6 +156,13 @@ const run = async (): Promise<void> => {
         const statusCode = Number(error?.statusCode || error?.response?.status || 0);
         const message = error?.message || 'unknown_error';
         console.warn(`[remote-ingest] Listing fetch failed r/${subredditName}: ${url}`, { statusCode, message });
+        if (statusCode === 429 && FAIL_FAST_ON_429) {
+          throw new Error(
+            `[remote-ingest] Reddit returned 429 for r/${subredditName}. ` +
+            `Stopping immediately to avoid escalating rate limits. ` +
+            `Increase REDDIT_REQUEST_DELAY_MS and retry later.`
+          );
+        }
       }
       await delay(REQUEST_DELAY_MS);
     }

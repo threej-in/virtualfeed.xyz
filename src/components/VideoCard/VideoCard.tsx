@@ -6,7 +6,7 @@ import MovieIcon from '@mui/icons-material/Movie';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import RedditIcon from '@mui/icons-material/Reddit';
 import { Video } from '../../types/Video';
-import { getBackendAssetUrl, getRedditThumbnailProxyUrl, getRedditVideoProxyUrl } from '../../services/api';
+import { getBackendAssetUrl, getRedditThumbnailProxyUrl } from '../../services/api';
 
 interface VideoCardProps {
     video: Video;
@@ -171,16 +171,16 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, showNsfw = false,
             : '';
 
         const explicitMp4 = [sourceFallback, ...sourceCandidates].find((c: string) => isMp4(c));
-        if (explicitMp4) return getRedditVideoProxyUrl(explicitMp4);
+        if (explicitMp4) return explicitMp4;
 
         if (typeof video.videoUrl === 'string' && isMp4(video.videoUrl)) {
-            return getRedditVideoProxyUrl(cleanup(video.videoUrl));
+            return cleanup(video.videoUrl);
         }
 
         const seed = `${sourceFallback} ${video.videoUrl || ''}`;
         const videoId = extractVideoId(seed);
         if (videoId) {
-            return getRedditVideoProxyUrl(`https://v.redd.it/${videoId}/CMAF_720.mp4`);
+            return `https://v.redd.it/${videoId}/CMAF_720.mp4`;
         }
 
         return video.videoUrl;

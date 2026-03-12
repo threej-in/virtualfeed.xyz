@@ -641,7 +641,7 @@ export class RedditScraper {
         }
 
         const listingUrls = [
-            `https://www.reddit.com/r/${subredditName}/new.json?limit=60&raw_json=1`,
+            // `https://www.reddit.com/r/${subredditName}/new.json?limit=60&raw_json=1`,
             `https://www.reddit.com/r/${subredditName}/rising.json?limit=40&raw_json=1`,
             `https://www.reddit.com/r/${subredditName}/hot.json?limit=40&raw_json=1`,
             `https://www.reddit.com/r/${subredditName}/top.json?t=week&limit=40&raw_json=1`

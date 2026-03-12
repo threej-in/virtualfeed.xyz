@@ -33,7 +33,7 @@ import { useSwipeable } from 'react-swipeable';
 import dashjs from 'dashjs';
 import Hls from 'hls.js';
 import { Video } from '../../types/Video';
-import { updateVideoStats, getRedditAudioProxyUrl, getRedditVideoProxyUrl, likeVideoInternal } from '../../services/api';
+import { updateVideoStats, getRedditAudioProxyUrl, likeVideoInternal } from '../../services/api';
 
 interface VideoPlayerProps {
     videos: Video[];
@@ -211,7 +211,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         }
 
         const cleanup = (value: string) => value.replace(/&amp;/g, '&').trim();
-        const toRedditVideoProxy = (value: string) => getRedditVideoProxyUrl(value);
         const isDashUrl = (value: string) => /\.mpd(\?|$)/i.test(value) || /DASHPlaylist\.mpd/i.test(value);
         const isHlsUrl = (value: string) => /\.m3u8(\?|$)/i.test(value) || /HLSPlaylist\.m3u8/i.test(value);
         const isMp4Url = (value: string) => /\.mp4(\?|$)/i.test(value) || /\/DASH_\d+\.mp4(\?|$)/i.test(value);
@@ -289,64 +288,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
             return '';
         };
 
-        const rawMp4FallbackUrl = getMp4FallbackUrl();
-        const mp4FallbackUrl = rawMp4FallbackUrl ? toRedditVideoProxy(rawMp4FallbackUrl) : '';
+        const mp4FallbackUrl = getMp4FallbackUrl();
 
-        // Prefer direct MP4 via backend proxy for stable popup playback across hosts/CORS/403 scenarios.
-        if (mp4FallbackUrl && isCmafUrl(mp4FallbackUrl)) {
-            return {
-                url: mp4FallbackUrl,
-                type: 'mp4',
-                isReddit: true,
-                requiresExternalAudio: true,
-                mp4FallbackUrl
-            };
-        }
-        if (sourceFallback && isCmafUrl(sourceFallback)) {
-            return {
-                url: toRedditVideoProxy(sourceFallback),
-                type: 'mp4',
-                isReddit: true,
-                requiresExternalAudio: true,
-                mp4FallbackUrl
-            };
-        }
-        if (sourceFallback && isMp4Url(sourceFallback)) {
-            return {
-                url: toRedditVideoProxy(sourceFallback),
-                type: 'mp4',
-                isReddit: true,
-                requiresExternalAudio: true,
-                mp4FallbackUrl
-            };
-        }
-        if (sourceCandidates.length > 0) {
-            const preferredCandidate = sourceCandidates.find((candidate: string) => isCmafUrl(candidate)) || sourceCandidates[0];
-            return {
-                url: toRedditVideoProxy(preferredCandidate),
-                type: 'mp4',
-                isReddit: true,
-                requiresExternalAudio: !isCmafUrl(preferredCandidate),
-                mp4FallbackUrl
-            };
-        }
-
-        const seed = sourceDash || sourceHls || sourceFallback || cleanedVideoUrl;
-        const seedId = getVideoId(seed);
-        const querySuffix = getQuerySuffix(seed);
-        const generatedCandidates = buildMp4Candidates(seedId, querySuffix);
-        if (generatedCandidates.length > 0) {
-            const preferredCandidate = generatedCandidates.find((candidate: string) => isCmafUrl(candidate)) || generatedCandidates[0];
-            return {
-                url: toRedditVideoProxy(preferredCandidate),
-                type: 'mp4',
-                isReddit: true,
-                requiresExternalAudio: !isCmafUrl(preferredCandidate),
-                mp4FallbackUrl
-            };
-        }
-
-        // Adaptive stream fallback only when no MP4 candidate was found.
+        // redditpx-style priority: DASH first (audio track handled by manifest),
+        // then HLS, then MP4 fallback.
         if (sourceDash) {
             return { url: sourceDash, type: 'dash', isReddit: true, requiresExternalAudio: false, mp4FallbackUrl };
         }
@@ -359,6 +304,58 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         if (sourceFallback && isHlsUrl(sourceFallback)) {
             return { url: sourceFallback, type: 'hls', isReddit: true, requiresExternalAudio: false, mp4FallbackUrl };
         }
+        if (mp4FallbackUrl && isCmafUrl(mp4FallbackUrl)) {
+            return {
+                url: mp4FallbackUrl,
+                type: 'mp4',
+                isReddit: true,
+                requiresExternalAudio: false,
+                mp4FallbackUrl
+            };
+        }
+        if (sourceFallback && isCmafUrl(sourceFallback)) {
+            return {
+                url: sourceFallback,
+                type: 'mp4',
+                isReddit: true,
+                requiresExternalAudio: false,
+                mp4FallbackUrl
+            };
+        }
+        if (sourceFallback && isMp4Url(sourceFallback)) {
+            return {
+                url: sourceFallback,
+                type: 'mp4',
+                isReddit: true,
+                requiresExternalAudio: false,
+                mp4FallbackUrl
+            };
+        }
+        if (sourceCandidates.length > 0) {
+            const preferredCandidate = sourceCandidates.find((candidate: string) => isCmafUrl(candidate)) || sourceCandidates[0];
+            return {
+                url: preferredCandidate,
+                type: 'mp4',
+                isReddit: true,
+                requiresExternalAudio: false,
+                mp4FallbackUrl
+            };
+        }
+
+        const seed = sourceDash || sourceHls || sourceFallback || cleanedVideoUrl;
+        const seedId = getVideoId(seed);
+        const querySuffix = getQuerySuffix(seed);
+        const generatedCandidates = buildMp4Candidates(seedId, querySuffix);
+        if (generatedCandidates.length > 0) {
+            const preferredCandidate = generatedCandidates.find((candidate: string) => isCmafUrl(candidate)) || generatedCandidates[0];
+            return {
+                url: preferredCandidate,
+                type: 'mp4',
+                isReddit: true,
+                requiresExternalAudio: false,
+                mp4FallbackUrl
+            };
+        }
 
         if (isDashUrl(cleanedVideoUrl)) {
             return { url: cleanedVideoUrl, type: 'dash', isReddit: true, requiresExternalAudio: false, mp4FallbackUrl };
@@ -367,14 +364,14 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
             return { url: cleanedVideoUrl, type: 'hls', isReddit: true, requiresExternalAudio: false, mp4FallbackUrl };
         }
         if (isCmafUrl(cleanedVideoUrl)) {
-            return { url: toRedditVideoProxy(cleanedVideoUrl), type: 'mp4', isReddit: true, requiresExternalAudio: true, mp4FallbackUrl };
+            return { url: cleanedVideoUrl, type: 'mp4', isReddit: true, requiresExternalAudio: false, mp4FallbackUrl };
         }
         if (cleanedVideoUrl.includes('v.redd.it')) {
             return {
-                url: toRedditVideoProxy(cleanedVideoUrl),
+                url: cleanedVideoUrl,
                 type: 'mp4',
                 isReddit: true,
-                requiresExternalAudio: true,
+                requiresExternalAudio: false,
                 mp4FallbackUrl
             };
         }
@@ -822,7 +819,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         const audioElement = audioRef.current;
 
         if (videoElement) {
-            videoElement.muted = isMuted || hasAudioTrack;
+            videoElement.muted = isMuted;
         }
 
         if (!audioElement) {
@@ -1492,7 +1489,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                         playsInline
                                         preload="auto"
                                         autoPlay
-                                        muted={isMuted || hasAudioTrack}
+                                        muted={isMuted}
                                         loop={isLooping}
                                         onTimeUpdate={handleTimeUpdate}
                                         onPlay={() => setIsPlaying(true)}

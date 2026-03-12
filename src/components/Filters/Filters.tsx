@@ -151,8 +151,17 @@ const Filters: React.FC<FiltersProps> = ({
   };
 
   const handleNsfwToggle = (newValue: boolean) => {
-    setPendingNsfwChange(newValue);
-    setShowNsfwDialog(true);
+    // Ask age confirmation only when enabling NSFW.
+    if (newValue && !showNsfw) {
+      setPendingNsfwChange(newValue);
+      setShowNsfwDialog(true);
+      return;
+    }
+
+    // Disabling NSFW should be immediate and frictionless.
+    onNsfwChange(newValue);
+    setPendingNsfwChange(null);
+    setShowNsfwDialog(false);
   };
 
   const confirmNsfwChange = () => {
@@ -337,57 +346,122 @@ const Filters: React.FC<FiltersProps> = ({
     </FiltersContainer>
   );
 
+  const renderNsfwDialog = () => (
+    <Dialog
+      open={showNsfwDialog}
+      onClose={cancelNsfwChange}
+      PaperProps={{
+        sx: {
+          backgroundColor: '#1a1a1a',
+          backdropFilter: 'blur(12px)',
+          border: '1px solid rgba(255, 255, 255, 0.14)',
+          borderRadius: '16px',
+          color: '#fff',
+        }
+      }}
+    >
+      <DialogTitle sx={{ 
+        color: '#ff0000', 
+        fontWeight: 600,
+        borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
+      }}>
+        Age Verification Required
+      </DialogTitle>
+      <DialogContent sx={{ pt: 2 }}>
+        <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)', mb: 2 }}>
+          {pendingNsfwChange 
+            ? 'You are about to enable NSFW (Not Safe For Work) content. This may include explicit or adult material.'
+            : 'You are about to disable NSFW content.'
+          }
+        </Typography>
+        <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.9)', fontWeight: 500 }}>
+          Are you 18 years or older?
+        </Typography>
+      </DialogContent>
+      <DialogActions sx={{ p: 2, gap: 1 }}>
+        <Button 
+          onClick={cancelNsfwChange}
+          variant="outlined"
+          sx={{ 
+            borderColor: 'rgba(255, 255, 255, 0.3)',
+            color: '#fff',
+            '&:hover': {
+              borderColor: 'rgba(255, 255, 255, 0.5)',
+            }
+          }}
+        >
+          Cancel
+        </Button>
+        <Button 
+          onClick={confirmNsfwChange}
+          variant="contained"
+          sx={{ 
+            backgroundColor: '#ff0000',
+            '&:hover': {
+              backgroundColor: '#e55a75',
+            }
+          }}
+        >
+          Yes, I'm 18+
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+
   // For mobile view
   if (isMobile && mobileView) {
     const open = Boolean(anchorEl);
     const id = open ? 'filters-popover' : undefined;
 
     return (
-      <Box>
-        <IconButton
-          onClick={handleFilterClick}
-          aria-describedby={id}
-          sx={{
-            backgroundColor: '#121212',
-            backdropFilter: 'blur(10px)',
-            border: '1px solid rgba(255, 255, 255, 0.12)',
-            borderRadius: '50%',
-            p: '6px',
-            '&:hover': {
-              backgroundColor: '#1a1a1a',
-            }
-          }}
-        >
-          <FilterListIcon fontSize="small" />
-        </IconButton>
-        <Popover
-          id={id}
-          open={open}
-          anchorEl={anchorEl}
-          onClose={handleClose}
-          anchorOrigin={{
-            vertical: 'bottom',
-            horizontal: 'right',
-          }}
-          transformOrigin={{
-            vertical: 'top',
-            horizontal: 'right',
-          }}
-          PaperProps={{
-            sx: {
-              mt: 1,
-              p: 1.5,
-              borderRadius: '12px',
-              backgroundColor: '#1a1a1a',
-              backdropFilter: 'blur(12px)',
-              border: '1px solid rgba(255, 255, 255, 0.14)',
-              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2)',
-            }
-          }}
-        >
-          {renderFilters(true)}
-        </Popover>
-      </Box>
+      <>
+        <Box>
+          <IconButton
+            onClick={handleFilterClick}
+            aria-describedby={id}
+            sx={{
+              backgroundColor: '#121212',
+              backdropFilter: 'blur(10px)',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              borderRadius: '50%',
+              p: '6px',
+              '&:hover': {
+                backgroundColor: '#1a1a1a',
+              }
+            }}
+          >
+            <FilterListIcon fontSize="small" />
+          </IconButton>
+          <Popover
+            id={id}
+            open={open}
+            anchorEl={anchorEl}
+            onClose={handleClose}
+            anchorOrigin={{
+              vertical: 'bottom',
+              horizontal: 'right',
+            }}
+            transformOrigin={{
+              vertical: 'top',
+              horizontal: 'right',
+            }}
+            PaperProps={{
+              sx: {
+                mt: 1,
+                p: 1.5,
+                borderRadius: '12px',
+                backgroundColor: '#1a1a1a',
+                backdropFilter: 'blur(12px)',
+                border: '1px solid rgba(255, 255, 255, 0.14)',
+                boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2)',
+              }
+            }}
+          >
+            {renderFilters(true)}
+          </Popover>
+        </Box>
+        {renderNsfwDialog()}
+      </>
     );
   }
 
@@ -397,65 +471,7 @@ const Filters: React.FC<FiltersProps> = ({
       {renderFilters(false)}
       
       {/* NSFW Confirmation Dialog */}
-      <Dialog
-        open={showNsfwDialog}
-        onClose={cancelNsfwChange}
-        PaperProps={{
-          sx: {
-            backgroundColor: '#1a1a1a',
-            backdropFilter: 'blur(12px)',
-            border: '1px solid rgba(255, 255, 255, 0.14)',
-            borderRadius: '16px',
-            color: '#fff',
-          }
-        }}
-      >
-        <DialogTitle sx={{ 
-          color: '#ff0000', 
-          fontWeight: 600,
-          borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
-        }}>
-          Age Verification Required
-        </DialogTitle>
-        <DialogContent sx={{ pt: 2 }}>
-          <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)', mb: 2 }}>
-            {pendingNsfwChange 
-              ? 'You are about to enable NSFW (Not Safe For Work) content. This may include explicit or adult material.'
-              : 'You are about to disable NSFW content.'
-            }
-          </Typography>
-          <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.9)', fontWeight: 500 }}>
-            Are you 18 years or older?
-          </Typography>
-        </DialogContent>
-        <DialogActions sx={{ p: 2, gap: 1 }}>
-          <Button 
-            onClick={cancelNsfwChange}
-            variant="outlined"
-            sx={{ 
-              borderColor: 'rgba(255, 255, 255, 0.3)',
-              color: '#fff',
-              '&:hover': {
-                borderColor: 'rgba(255, 255, 255, 0.5)',
-              }
-            }}
-          >
-            Cancel
-          </Button>
-          <Button 
-            onClick={confirmNsfwChange}
-            variant="contained"
-            sx={{ 
-              backgroundColor: '#ff0000',
-              '&:hover': {
-                backgroundColor: '#e55a75',
-              }
-            }}
-          >
-            Yes, I'm 18+
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {renderNsfwDialog()}
     </>
   );
 };

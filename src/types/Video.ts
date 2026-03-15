@@ -21,12 +21,14 @@ export interface Video {
         redditScore?: number;
         redditUrl?: string;
         upvotes?: number;
+        hasAudio?: boolean;
         audioUrl?: string; // Added for Reddit videos with separate audio tracks
         redditVideoSources?: {
             fallbackUrl?: string;
             dashUrl?: string;
             hlsUrl?: string;
             mp4Candidates?: string[];
+            hasAudio?: boolean;
         };
         platform?: string;
         youtubeId?: string;

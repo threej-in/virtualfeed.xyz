@@ -445,11 +445,13 @@ export class RedditScraper {
             
             // For Reddit videos, try to extract audio URL
             let audioUrl = '';
-            let redditVideoSources: { fallbackUrl?: string; dashUrl?: string; hlsUrl?: string; mp4Candidates?: string[] } | undefined;
+            let hasAudio = false;
+            let redditVideoSources: { fallbackUrl?: string; dashUrl?: string; hlsUrl?: string; mp4Candidates?: string[]; hasAudio?: boolean } | undefined;
             if (videoMetadata.url.includes('v.redd.it')) {
                 const fallbackUrl = this.decodeRedditUrl(redditVideo?.fallback_url as string | undefined) || undefined;
                 const dashUrl = this.decodeRedditUrl(redditVideo?.dash_url as string | undefined) || undefined;
                 const hlsUrl = this.decodeRedditUrl(redditVideo?.hls_url as string | undefined) || undefined;
+                hasAudio = redditVideo?.has_audio === true;
                 const querySeed = fallbackUrl || dashUrl || hlsUrl || videoMetadata.url;
                 const videoIdFromSources = this.getRedditVideoIdFromUrl(querySeed);
                 const querySuffix = this.getQuerySuffix(querySeed);
@@ -460,10 +462,11 @@ export class RedditScraper {
                         fallbackUrl,
                         dashUrl,
                         hlsUrl,
-                        mp4Candidates
+                        mp4Candidates,
+                        hasAudio
                     };
                 }
-                if (videoIdFromSources) {
+                if (videoIdFromSources && hasAudio) {
                     audioUrl = `https://v.redd.it/${videoIdFromSources}/CMAF_AUDIO_128.mp4${querySuffix}`;
                 }
             }
@@ -488,6 +491,7 @@ export class RedditScraper {
                     redditScore: post.score,
                     redditUrl: `https://reddit.com${post.permalink}`,
                     upvotes: post.score, // Store upvotes in metadata too for backward compatibility
+                    hasAudio,
                     audioUrl, // Store the audio URL in metadata
                     redditVideoSources,
                     author: post.author ? post.author.name : null // Store author name for duplicate detection
@@ -823,6 +827,7 @@ export class RedditScraper {
                 const hlsUrl = this.decodeRedditUrl(redditVideo?.hls_url as string | undefined) || undefined;
                 const refreshedVideoUrl = this.derivePlayableRedditVideoUrl(redditVideo) || video.videoUrl;
                 const refreshedThumbnailUrl = this.getRedditPreviewThumbnail(post) || video.thumbnailUrl;
+                const refreshedHasAudio = redditVideo?.has_audio === true;
 
                 // If we still don't have any playable stream URL, blacklist to avoid dead cards.
                 if (!refreshedVideoUrl) {
@@ -835,9 +840,9 @@ export class RedditScraper {
                     : '';
 
                 const match = refreshedVideoUrl.match(/v\.redd\.it\/([^/?]+)/i);
-                const refreshedAudioUrl = match?.[1]
+                const refreshedAudioUrl = refreshedHasAudio && match?.[1]
                     ? `https://v.redd.it/${match[1]}/CMAF_AUDIO_128.mp4${querySuffix}`
-                    : metadata?.audioUrl || '';
+                    : '';
                 const refreshedCandidates = match?.[1]
                     ? this.buildRedditMp4Candidates(match[1], querySuffix)
                     : [];
@@ -847,12 +852,14 @@ export class RedditScraper {
                     redditUrl: `https://reddit.com${post.permalink}`,
                     redditScore: post.score,
                     upvotes: post.score,
+                    hasAudio: refreshedHasAudio,
                     audioUrl: refreshedAudioUrl,
                     redditVideoSources: {
                         fallbackUrl,
                         dashUrl,
                         hlsUrl,
-                        mp4Candidates: refreshedCandidates
+                        mp4Candidates: refreshedCandidates,
+                        hasAudio: refreshedHasAudio
                     },
                     mediaRefreshedAt: new Date().toISOString()
                 };

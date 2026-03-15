@@ -245,7 +245,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         }
 
         const metadata = parseVideoMetadata(video);
-        const hasExternalAudioCandidate = typeof metadata?.audioUrl === 'string' && metadata.audioUrl.trim().length > 0;
+        const hasExplicitAudio =
+            metadata?.hasAudio === true ||
+            metadata?.redditVideoSources?.hasAudio === true;
+        const hasExternalAudioCandidate =
+            hasExplicitAudio &&
+            typeof metadata?.audioUrl === 'string' &&
+            metadata.audioUrl.trim().length > 0;
         const sourceFallback = typeof metadata?.redditVideoSources?.fallbackUrl === 'string'
             ? cleanup(metadata.redditVideoSources.fallbackUrl)
             : '';
@@ -290,13 +296,34 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         };
 
         const mp4FallbackUrl = getMp4FallbackUrl();
+        const hoverCompatibleMp4Url = (() => {
+            const explicitMp4 = [sourceFallback, ...sourceCandidates].find(
+                (candidate): candidate is string => typeof candidate === 'string' && isMp4Url(candidate)
+            );
+            if (explicitMp4) {
+                return explicitMp4;
+            }
+            if (cleanedVideoUrl && isMp4Url(cleanedVideoUrl)) {
+                return cleanedVideoUrl;
+            }
+            return mp4FallbackUrl;
+        })();
 
         // Keep popup Reddit playback aligned with hover previews:
         // prefer a concrete MP4/CMAF URL first because it is the path that is
         // already known to work in the grid. Adaptive manifests remain fallback.
-        if (mp4FallbackUrl && isCmafUrl(mp4FallbackUrl)) {
+        if (hoverCompatibleMp4Url && isCmafUrl(hoverCompatibleMp4Url)) {
             return {
-                url: mp4FallbackUrl,
+                url: hoverCompatibleMp4Url,
+                type: 'mp4',
+                isReddit: true,
+                requiresExternalAudio: hasExternalAudioCandidate,
+                mp4FallbackUrl
+            };
+        }
+        if (hoverCompatibleMp4Url && isMp4Url(hoverCompatibleMp4Url)) {
+            return {
+                url: hoverCompatibleMp4Url,
                 type: 'mp4',
                 isReddit: true,
                 requiresExternalAudio: hasExternalAudioCandidate,
@@ -306,25 +333,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         if (sourceFallback && isCmafUrl(sourceFallback)) {
             return {
                 url: sourceFallback,
-                type: 'mp4',
-                isReddit: true,
-                requiresExternalAudio: hasExternalAudioCandidate,
-                mp4FallbackUrl
-            };
-        }
-        if (sourceFallback && isMp4Url(sourceFallback)) {
-            return {
-                url: sourceFallback,
-                type: 'mp4',
-                isReddit: true,
-                requiresExternalAudio: hasExternalAudioCandidate,
-                mp4FallbackUrl
-            };
-        }
-        if (sourceCandidates.length > 0) {
-            const preferredCandidate = sourceCandidates.find((candidate: string) => isCmafUrl(candidate)) || sourceCandidates[0];
-            return {
-                url: preferredCandidate,
                 type: 'mp4',
                 isReddit: true,
                 requiresExternalAudio: hasExternalAudioCandidate,
@@ -721,9 +729,12 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         const isRedditVideo =
             currentVideo.platform === 'reddit' ||
             (currentVideo.videoUrl && currentVideo.videoUrl.includes('v.redd.it'));
-        let rawAudioUrl = metadata?.audioUrl;
+        const hasExplicitAudio =
+            metadata?.hasAudio === true ||
+            metadata?.redditVideoSources?.hasAudio === true;
+        let rawAudioUrl = hasExplicitAudio ? metadata?.audioUrl : '';
 
-        if ((!rawAudioUrl || typeof rawAudioUrl !== 'string') && isRedditVideo) {
+        if ((!rawAudioUrl || typeof rawAudioUrl !== 'string') && isRedditVideo && hasExplicitAudio) {
             const audioSeedUrl = [currentVideo.videoUrl, activePlaybackSource.url]
                 .find((candidate) => typeof candidate === 'string' && candidate.includes('v.redd.it')) || '';
             const match = audioSeedUrl.match(/v\.redd\.it\/([^/?]+)/i);

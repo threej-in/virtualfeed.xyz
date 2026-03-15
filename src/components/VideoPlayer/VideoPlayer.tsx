@@ -30,7 +30,7 @@ import {
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSwipeable } from 'react-swipeable';
-import dashjs from 'dashjs';
+import * as dashjs from 'dashjs';
 import Hls from 'hls.js';
 import { Video } from '../../types/Video';
 import { updateVideoStats, getRedditAudioProxyUrl, likeVideoInternal } from '../../services/api';
@@ -245,6 +245,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         }
 
         const metadata = parseVideoMetadata(video);
+        const hasExternalAudioCandidate = typeof metadata?.audioUrl === 'string' && metadata.audioUrl.trim().length > 0;
         const sourceFallback = typeof metadata?.redditVideoSources?.fallbackUrl === 'string'
             ? cleanup(metadata.redditVideoSources.fallbackUrl)
             : '';
@@ -309,7 +310,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                 url: mp4FallbackUrl,
                 type: 'mp4',
                 isReddit: true,
-                requiresExternalAudio: false,
+                requiresExternalAudio: hasExternalAudioCandidate,
                 mp4FallbackUrl
             };
         }
@@ -318,7 +319,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                 url: sourceFallback,
                 type: 'mp4',
                 isReddit: true,
-                requiresExternalAudio: false,
+                requiresExternalAudio: hasExternalAudioCandidate,
                 mp4FallbackUrl
             };
         }
@@ -327,7 +328,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                 url: sourceFallback,
                 type: 'mp4',
                 isReddit: true,
-                requiresExternalAudio: false,
+                requiresExternalAudio: hasExternalAudioCandidate,
                 mp4FallbackUrl
             };
         }
@@ -337,7 +338,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                 url: preferredCandidate,
                 type: 'mp4',
                 isReddit: true,
-                requiresExternalAudio: false,
+                requiresExternalAudio: hasExternalAudioCandidate,
                 mp4FallbackUrl
             };
         }
@@ -352,7 +353,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                 url: preferredCandidate,
                 type: 'mp4',
                 isReddit: true,
-                requiresExternalAudio: false,
+                requiresExternalAudio: hasExternalAudioCandidate,
                 mp4FallbackUrl
             };
         }
@@ -364,14 +365,14 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
             return { url: cleanedVideoUrl, type: 'hls', isReddit: true, requiresExternalAudio: false, mp4FallbackUrl };
         }
         if (isCmafUrl(cleanedVideoUrl)) {
-            return { url: cleanedVideoUrl, type: 'mp4', isReddit: true, requiresExternalAudio: false, mp4FallbackUrl };
+            return { url: cleanedVideoUrl, type: 'mp4', isReddit: true, requiresExternalAudio: hasExternalAudioCandidate, mp4FallbackUrl };
         }
         if (cleanedVideoUrl.includes('v.redd.it')) {
             return {
                 url: cleanedVideoUrl,
                 type: 'mp4',
                 isReddit: true,
-                requiresExternalAudio: false,
+                requiresExternalAudio: hasExternalAudioCandidate,
                 mp4FallbackUrl
             };
         }
@@ -453,7 +454,17 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
 
         if (activePlaybackSource.type === 'dash' && activePlaybackSource.url) {
             teardownAdaptivePlayers();
-            const dashPlayer = dashjs.MediaPlayer().create();
+            const dashFactory = (dashjs as any)?.MediaPlayer;
+            if (!dashFactory || typeof dashFactory !== 'function') {
+                console.error('dash.js MediaPlayer is unavailable in this build');
+                maybeFallbackToMp4('dash_unavailable');
+                return () => {
+                    videoElement.onloadedmetadata = null;
+                    teardownAdaptivePlayers();
+                };
+            }
+
+            const dashPlayer = dashFactory().create();
             dashPlayerRef.current = dashPlayer;
             dashPlayer.initialize(videoElement, activePlaybackSource.url, true);
 
@@ -467,14 +478,23 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                 }
             }, 7000);
 
-            dashPlayer.on(dashjs.MediaPlayer.events.ERROR, (event: any) => {
-                console.error('DASH playback error:', event);
-                maybeFallbackToMp4('dash_error');
-            });
-            dashPlayer.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, () => {
+            const dashEvents = (dashFactory as any)?.events;
+            if (dashEvents?.ERROR) {
+                dashPlayer.on(dashEvents.ERROR, (event: any) => {
+                    console.error('DASH playback error:', event);
+                    maybeFallbackToMp4('dash_error');
+                });
+            }
+            if (dashEvents?.STREAM_INITIALIZED) {
+                dashPlayer.on(dashEvents.STREAM_INITIALIZED, () => {
+                    setIsBuffering(false);
+                    attemptPlay();
+                });
+            } else {
+                // If events are unavailable, attempt playback immediately after initialize.
                 setIsBuffering(false);
                 attemptPlay();
-            });
+            }
             return () => {
                 window.clearTimeout(failoverTimer);
                 videoElement.onloadedmetadata = null;
@@ -819,7 +839,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         const audioElement = audioRef.current;
 
         if (videoElement) {
-            videoElement.muted = isMuted;
+            videoElement.muted = isMuted || hasAudioTrack;
         }
 
         if (!audioElement) {
@@ -1489,7 +1509,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                         playsInline
                                         preload="auto"
                                         autoPlay
-                                        muted={isMuted}
+                                        muted={isMuted || hasAudioTrack}
                                         loop={isLooping}
                                         onTimeUpdate={handleTimeUpdate}
                                         onPlay={() => setIsPlaying(true)}
@@ -1525,7 +1545,16 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                                                 }
                                             }
                                         }}
-                                    />
+                                    >
+                                        <source
+                                            src={
+                                                activePlaybackSource.type === 'mp4'
+                                                    ? activePlaybackSource.url
+                                                    : (activePlaybackSource.mp4FallbackUrl || '')
+                                            }
+                                            type="video/mp4"
+                                        />
+                                    </video>
                                 )}
                                 
                                 {/* Audio functionality has been removed */}

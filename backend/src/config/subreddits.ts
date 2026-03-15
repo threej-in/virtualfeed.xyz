@@ -115,11 +115,11 @@ const adultAISubreddits = [
 
 const generalSubreddits: SubredditConfig[] = [
   toConfig("chatGPT", 30, false),
-  toConfig("nextfuckinglevel", 30, false),
-  toConfig("damnthatsinteresting", 30, false),
-  toConfig("interestingasfuck", 30, false),
-  toConfig("singularity", 30, false),
-  toConfig("crazyfuckingvideos", 30, false),
+  // toConfig("nextfuckinglevel", 30, false),
+  // toConfig("damnthatsinteresting", 30, false),
+  // toConfig("interestingasfuck", 30, false),
+  // toConfig("singularity", 30, false),
+  // toConfig("crazyfuckingvideos", 30, false),
 ];
 
 const uniqueNames = new Set<string>();

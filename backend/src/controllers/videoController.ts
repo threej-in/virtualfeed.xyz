@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import Video from '../models/Video';
 import { TrendingService, TRENDING_PERIODS } from '../services/trendingService';
+import { logger } from '../services/logger';
 import { LanguageDetector } from '../utils/languageDetection';
 import { filterAvailableVideos } from '../utils/videoAvailability';
 import { buildFeedMemoryKey, getRecentFeedIds, rememberFeedIds } from '../utils/feedMemory';
@@ -248,6 +249,61 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
             return currentVideos;
         };
 
+        const fetchSimpleHomepageFallback = async (): Promise<{ videos: any[]; total: number }> => {
+            const db = require('../config/database').default;
+            const whereConditions: string[] = [];
+            const queryParams: any[] = [];
+
+            if (subreddit && typeof subreddit === 'string' && subreddit.trim()) {
+                whereConditions.push('subreddit = ?');
+                queryParams.push(subreddit.trim());
+            }
+
+            if (selectedPlatform) {
+                whereConditions.push('platform = ?');
+                queryParams.push(selectedPlatform);
+            }
+
+            if (effectiveSearch) {
+                whereConditions.push('(title LIKE ? OR description LIKE ?)');
+                queryParams.push(`%${effectiveSearch}%`, `%${effectiveSearch}%`);
+            }
+
+            if (forceNsfwOnly) {
+                whereConditions.push('nsfw = 1');
+            } else if (!effectiveShowNsfw) {
+                whereConditions.push('(nsfw = 0 OR nsfw IS NULL)');
+            }
+
+            whereConditions.push('(blacklisted = 0 OR blacklisted IS NULL)');
+            whereConditions.push("(thumbnailUrl IS NOT NULL AND TRIM(thumbnailUrl) <> '')");
+
+            const whereClause = whereConditions.length > 0
+                ? `WHERE ${whereConditions.join(' AND ')}`
+                : '';
+
+            const countQuery = `SELECT COUNT(*) as count FROM videos ${whereClause}`;
+            const [countResult] = await db.query(countQuery, { replacements: queryParams });
+            const total = Number(countResult?.[0]?.count || 0);
+
+            if (total === 0) {
+                return { videos: [], total: 0 };
+            }
+
+            const validSortFields = ['id', 'title', 'createdAt', 'views', 'likes'];
+            const finalSortBy = validSortFields.includes(effectiveSortBy) ? effectiveSortBy : 'createdAt';
+            const finalOrder = effectiveOrder === 'asc' ? 'ASC' : 'DESC';
+            const videosQuery = `
+                SELECT *
+                FROM videos
+                ${whereClause}
+                ORDER BY ${finalSortBy} ${finalOrder}, id DESC
+                LIMIT ${limitNum} OFFSET ${offset}
+            `;
+            const [videos] = await db.query(videosQuery, { replacements: queryParams });
+            return { videos: videos || [], total };
+        };
+
         // Handle trending filter
         if (trending && typeof trending === 'string') {
             const trendingPeriod = TRENDING_PERIODS.find(p => p.label === trending);
@@ -305,15 +361,10 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
         }
 
         // If no trending filter is applied, use the new homepage algorithm
-        // Detect user's preferred language from Accept-Language header
-        const acceptLanguage = req.headers['accept-language'] as string;
-        const browserLanguage = LanguageDetector.getBrowserLanguage(acceptLanguage);
-        const preferredLanguage = LanguageDetector.mapBrowserLanguageToVideoLanguage(browserLanguage);
-        
-        // Use provided language parameter or fall back to browser language
-        const targetLanguage = normalizedSelectedLanguage || preferredLanguage;
+        // Only apply language filtering when the user explicitly selected a language.
+        const targetLanguage = normalizedSelectedLanguage;
 
-        const result = await TrendingService.getHomepageVideos(
+        let result = await TrendingService.getHomepageVideos(
             limitNum,
             offset,
             {
@@ -328,6 +379,19 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
             effectiveSortBy,
             effectiveOrder
         );
+
+        // Defensive fallback: if homepage diversification returns no rows, try a simple recent query.
+        if (result.total === 0) {
+            logger.warn('Homepage query returned zero rows, attempting simple fallback query', {
+                platform: selectedPlatform,
+                search: effectiveSearch,
+                subreddit,
+                showNsfw: effectiveShowNsfw,
+                language: targetLanguage || 'all',
+                page: pageNum
+            });
+            result = await fetchSimpleHomepageFallback();
+        }
 
         const availableVideos = await backfillAvailableVideos(
             await filterAvailableVideos(result.videos),

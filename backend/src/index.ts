@@ -85,21 +85,35 @@ async function startServer() {
       logger.info(`Server is running on port ${port}`);
     });
 
-    const startScraping = async () => {
+    const enableScraping = process.argv.includes('--enable-scraping');
+    const enableRedditScraping =
+      process.argv.includes('--enable-reddit-scraping') ||
+      (process.env.ENABLE_REDDIT_SCRAPING || 'false').toLowerCase() === 'true';
+    const enableYouTubeScraping =
+      enableScraping ||
+      process.argv.includes('--enable-youtube-scraping') ||
+      (process.env.ENABLE_YOUTUBE_SCRAPING || 'false').toLowerCase() === 'true';
+
+    const startRedditScraping = async () => {
       try {
         await RedditScraper.scrapeSubreddits();
         await RedditScraper.refreshRecentMediaSources(Number(process.env.REDDIT_MEDIA_REFRESH_LIMIT || 200));
-        await YouTubeScraper.scrapeYouTubeVideos();
       } catch (error) {
-        logger.error('Error in scraping cycle:', error);
+        logger.error('Error in Reddit scraping cycle:', error);
       }
     };
 
-    const enableScraping = process.argv.includes('--enable-scraping');
+    const startYouTubeScraping = async () => {
+      try {
+        await YouTubeScraper.scrapeYouTubeVideos();
+      } catch (error) {
+        logger.error('Error in YouTube scraping cycle:', error);
+      }
+    };
 
-    if (enableScraping) {
+    if (enableRedditScraping) {
       logger.info('Reddit scraping is enabled');
-      setInterval(startScraping, 24 * 60 * 60 * 1000);
+      setInterval(startRedditScraping, 24 * 60 * 60 * 1000);
       setInterval(
         () => {
           RedditScraper.refreshRecentMediaSources(Number(process.env.REDDIT_MEDIA_REFRESH_LIMIT || 200)).catch((error) =>
@@ -111,10 +125,21 @@ async function startServer() {
 
       setTimeout(() => {
         logger.info('Starting initial Reddit scrape');
-        startScraping();
+        startRedditScraping();
       }, 10000);
     } else {
       logger.info('Reddit scraping is disabled. Start with --enable-scraping flag to enable');
+    }
+
+    if (enableYouTubeScraping) {
+      logger.info('YouTube scraping is enabled');
+      setInterval(startYouTubeScraping, 24 * 60 * 60 * 1000);
+      setTimeout(() => {
+        logger.info('Starting initial YouTube scrape');
+        startYouTubeScraping();
+      }, 10000);
+    } else {
+      logger.info('YouTube scraping is disabled. Start with --enable-scraping flag to enable');
     }
   } catch (error) {
     logger.error('Error starting server:', error);

@@ -8,6 +8,17 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+const YOUTUBE_SCRAPER_LOGS_ENABLED = (process.env.YOUTUBE_SCRAPER_LOGS_ENABLED || 'false').toLowerCase() === 'true';
+const ytInfo = (message: string, meta?: any) => {
+  if (YOUTUBE_SCRAPER_LOGS_ENABLED) logger.info(message, meta);
+};
+const ytWarn = (message: string, meta?: any) => {
+  if (YOUTUBE_SCRAPER_LOGS_ENABLED) logger.warn(message, meta);
+};
+const ytError = (message: string, meta?: any) => {
+  if (YOUTUBE_SCRAPER_LOGS_ENABLED) logger.error(message, meta);
+};
+
 interface YouTubeSearchResponse {
   kind: string;
   etag: string;
@@ -128,7 +139,7 @@ export class YouTubeScraper {
   static async scrapeYouTubeVideos(maxPages?: number, searchTermLimit?: number): Promise<number> {
     try {
       const searchTerms = searchTermLimit ? getEnabledSearchTermsWithLimit(searchTermLimit) : getEnabledSearchTerms();
-      logger.info(`Starting YouTube video scraping for ${searchTerms.length} search terms${searchTermLimit ? ` (limited to ${searchTermLimit})` : ''}...`);
+      ytInfo(`Starting YouTube video scraping for ${searchTerms.length} search terms${searchTermLimit ? ` (limited to ${searchTermLimit})` : ''}...`);
       
       let totalProcessedCount = 0;
       
@@ -138,7 +149,7 @@ export class YouTubeScraper {
           const searchTermProcessedCount = await this.scrapeYouTubeForSearchTerm(searchConfig, maxPages);
           totalProcessedCount += searchTermProcessedCount;
           
-          logger.info(`Search term "${searchConfig.searchTerm}": Processed ${searchTermProcessedCount} videos`);
+          ytInfo(`Search term "${searchConfig.searchTerm}": Processed ${searchTermProcessedCount} videos`);
           
           // Add delay between search terms to be respectful to the RSS bridge service
           if (searchTerms.indexOf(searchConfig) < searchTerms.length - 1) {
@@ -146,16 +157,16 @@ export class YouTubeScraper {
           }
           
         } catch (error) {
-          logger.error(`Error scraping YouTube for search term "${searchConfig.searchTerm}":`, error);
+          ytError(`Error scraping YouTube for search term "${searchConfig.searchTerm}":`, error);
           // Continue with next search term
         }
       }
       
-      logger.info(`Successfully processed ${totalProcessedCount} YouTube videos from ${searchTerms.length} search terms`);
+      ytInfo(`Successfully processed ${totalProcessedCount} YouTube videos from ${searchTerms.length} search terms`);
       return totalProcessedCount;
       
     } catch (error) {
-      logger.error('Error in YouTube video scraping:', error);
+      ytError('Error in YouTube video scraping:', error);
       return 0;
     }
   }
@@ -163,7 +174,7 @@ export class YouTubeScraper {
   private static async scrapeYouTubeForSearchTerm(searchConfig: YouTubeSearchConfig, globalMaxPages?: number): Promise<number> {
     try {
       const maxPages = globalMaxPages || searchConfig.maxPages || 1;
-      logger.info(`Scraping YouTube for search term "${searchConfig.searchTerm}" (${searchConfig.description}) - up to ${maxPages} pages`);
+      ytInfo(`Scraping YouTube for search term "${searchConfig.searchTerm}" (${searchConfig.description}) - up to ${maxPages} pages`);
       
       let totalProcessedCount = 0;
       
@@ -173,7 +184,7 @@ export class YouTubeScraper {
           const pageProcessedCount = await this.scrapeYouTubePage(searchConfig.searchTerm, page);
           totalProcessedCount += pageProcessedCount;
           
-          logger.info(`Search "${searchConfig.searchTerm}" - Page ${page + 1}: Processed ${pageProcessedCount} videos`);
+          ytInfo(`Search "${searchConfig.searchTerm}" - Page ${page + 1}: Processed ${pageProcessedCount} videos`);
           
           // Add delay between pages to be respectful to the RSS bridge service
           if (page < maxPages - 1) {
@@ -181,7 +192,7 @@ export class YouTubeScraper {
           }
           
         } catch (error) {
-          logger.error(`Error scraping YouTube page ${page + 1} for search term "${searchConfig.searchTerm}":`, error);
+          ytError(`Error scraping YouTube page ${page + 1} for search term "${searchConfig.searchTerm}":`, error);
           // Continue with next page
         }
       }
@@ -189,7 +200,7 @@ export class YouTubeScraper {
       return totalProcessedCount;
       
     } catch (error) {
-      logger.error(`Error scraping YouTube for search term "${searchConfig.searchTerm}":`, error);
+      ytError(`Error scraping YouTube for search term "${searchConfig.searchTerm}":`, error);
       return 0;
     }
   }
@@ -198,7 +209,7 @@ export class YouTubeScraper {
     try {
       // Check if API key is configured
       if (!this.YOUTUBE_API_KEY) {
-        logger.error('YouTube API key is not configured. Please set YOUTUBE_API_KEY environment variable.');
+        ytError('YouTube API key is not configured. Please set YOUTUBE_API_KEY environment variable.');
         return 0;
       }
 
@@ -213,12 +224,12 @@ export class YouTubeScraper {
         key: this.YOUTUBE_API_KEY
       };
 
-      logger.info(`Searching YouTube API for "${searchTerm}" - page ${page + 1}`);
+      ytInfo(`Searching YouTube API for "${searchTerm}" - page ${page + 1}`);
       
       const response = await axios.get<YouTubeSearchResponse>(`${this.YOUTUBE_API_BASE_URL}/search`, { params: searchParams });
       const videos = response.data.items;
       
-      logger.info(`Found ${videos.length} YouTube videos for "${searchTerm}" on page ${page + 1}`);
+      ytInfo(`Found ${videos.length} YouTube videos for "${searchTerm}" on page ${page + 1}`);
       
       let processedCount = 0;
       
@@ -229,7 +240,7 @@ export class YouTubeScraper {
             processedCount++;
           }
         } catch (error) {
-          logger.error(`Error processing YouTube video ${video.id.videoId}:`, error);
+          ytError(`Error processing YouTube video ${video.id.videoId}:`, error);
           // Continue with next video
         }
       }
@@ -239,11 +250,11 @@ export class YouTubeScraper {
     } catch (error: any) {
       // Handle API quota exceeded
       if (error.response?.status === 403) {
-        logger.error('YouTube API quota exceeded or API key invalid');
+        ytError('YouTube API quota exceeded or API key invalid');
         return 0;
       }
       
-      logger.error(`Error searching YouTube for "${searchTerm}" - page ${page + 1}:`, error);
+      ytError(`Error searching YouTube for "${searchTerm}" - page ${page + 1}:`, error);
       return 0;
     }
   }
@@ -257,7 +268,7 @@ export class YouTubeScraper {
     try {
       // Validate video data structure
       if (!video || !video.id || !video.id.videoId || !video.snippet) {
-        logger.warn('Invalid video data structure received from YouTube API');
+        ytWarn('Invalid video data structure received from YouTube API');
         return false;
       }
 
@@ -265,7 +276,7 @@ export class YouTubeScraper {
       
       // Validate required fields
       if (!video.snippet.title || !video.snippet.description) {
-        logger.warn(`Missing required fields for video ${videoId}`);
+        ytWarn(`Missing required fields for video ${videoId}`);
         return false;
       }
       
@@ -278,42 +289,42 @@ export class YouTubeScraper {
       });
 
       if (existingVideo) {
-        logger.info(`YouTube video already exists: ${video.snippet.title}`);
+        ytInfo(`YouTube video already exists: ${video.snippet.title}`);
         return false;
       }
 
       // Check if content is AI-related
       if (!this.isAIContent(video.snippet.title, video.snippet.description)) {
-        logger.info(`Skipping non-AI YouTube video: ${video.snippet.title}`);
+        ytInfo(`Skipping non-AI YouTube video: ${video.snippet.title}`);
         return false;
       }
 
       // Get video details to check duration
       const videoDetails = await this.getVideoDetails(videoId);
       if (!videoDetails) {
-        logger.warn(`Could not get details for video: ${videoId}`);
+        ytWarn(`Could not get details for video: ${videoId}`);
         return false;
       }
 
       // Check video duration (must be less than 5 minutes)
       const durationInSeconds = this.parseDurationToSeconds(videoDetails.contentDetails.duration);
       if (durationInSeconds >= 300) { // 5 minutes = 300 seconds
-        logger.info(`Skipping video longer than 5 minutes: ${video.snippet.title} (${durationInSeconds}s)`);
+        ytInfo(`Skipping video longer than 5 minutes: ${video.snippet.title} (${durationInSeconds}s)`);
         return false;
       }
 
       const viewCount = parseInt(videoDetails.statistics.viewCount) || 0;
       const likeCount = parseInt(videoDetails.statistics.likeCount) || 0;
       if (likeCount < this.MIN_LIKE_COUNT) {
-        logger.info(`Skipping video with likes below ${this.MIN_LIKE_COUNT}: ${video.snippet.title} (${likeCount})`);
+        ytInfo(`Skipping video with likes below ${this.MIN_LIKE_COUNT}: ${video.snippet.title} (${likeCount})`);
         return false;
       }
       if (this.isLowQualityVideo(video, viewCount, likeCount)) {
-        logger.info(`Skipping low-quality YouTube video: ${video.snippet.title}`);
+        ytInfo(`Skipping low-quality YouTube video: ${video.snippet.title}`);
         return false;
       }
 
-      logger.info(`Processing AI-related video under 5 minutes: ${video.snippet.title} (${durationInSeconds}s)`);
+      ytInfo(`Processing AI-related video under 5 minutes: ${video.snippet.title} (${durationInSeconds}s)`);
 
       // Extract thumbnail URL (prefer maxres, fallback to high)
       const thumbnailUrl = video.snippet.thumbnails.maxres?.url || 
@@ -371,12 +382,12 @@ export class YouTubeScraper {
       try {
         JSON.stringify(videoData.metadata);
       } catch (metadataError) {
-        logger.error(`Metadata serialization error for video ${videoId}:`, metadataError);
+        ytError(`Metadata serialization error for video ${videoId}:`, metadataError);
         return false;
       }
 
       // Save to database
-      logger.info(`Attempting to save video to database: ${video.snippet.title}`);
+      ytInfo(`Attempting to save video to database: ${video.snippet.title}`);
       
       try {
         await Video.create({
@@ -386,16 +397,16 @@ export class YouTubeScraper {
           blacklisted: false
         });
 
-        logger.info(`Successfully saved YouTube video from search "${searchTerm}": ${video.snippet.title}`);
+        ytInfo(`Successfully saved YouTube video from search "${searchTerm}": ${video.snippet.title}`);
         return true;
       } catch (dbError: any) {
         // Handle specific database errors
         if (dbError.name === 'SequelizeUniqueConstraintError') {
-          logger.warn(`Video ${videoId} already exists in database (unique constraint violation)`);
+          ytWarn(`Video ${videoId} already exists in database (unique constraint violation)`);
           return false;
         }
         
-        logger.error(`Database error saving video ${videoId}:`, {
+        ytError(`Database error saving video ${videoId}:`, {
           error: dbError.message,
           code: dbError.code,
           name: dbError.name
@@ -404,7 +415,7 @@ export class YouTubeScraper {
       }
 
     } catch (error) {
-      logger.error(`Error processing YouTube video ${video.id.videoId}:`, {
+      ytError(`Error processing YouTube video ${video.id.videoId}:`, {
         error: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined,
         videoId: video.id.videoId,
@@ -444,7 +455,7 @@ export class YouTubeScraper {
     try {
       // Check if API key is configured
       if (!this.YOUTUBE_API_KEY) {
-        logger.error('YouTube API key is not configured');
+        ytError('YouTube API key is not configured');
         return null;
       }
 
@@ -460,9 +471,9 @@ export class YouTubeScraper {
       
     } catch (error: any) {
       if (error.response?.status === 403) {
-        logger.error('YouTube API quota exceeded or API key invalid');
+        ytError('YouTube API quota exceeded or API key invalid');
       } else {
-        logger.error(`Error getting video details for ${videoId}:`, error);
+        ytError(`Error getting video details for ${videoId}:`, error);
       }
       return null;
     }
@@ -627,7 +638,7 @@ export class YouTubeScraper {
       return { success: true, video: newVideo.toJSON() };
 
     } catch (error) {
-      logger.error('Error processing single YouTube video:', error);
+      ytError('Error processing single YouTube video:', error);
       return { 
         success: false, 
         error: error instanceof Error ? error.message : 'Unknown error occurred' 

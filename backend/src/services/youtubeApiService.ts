@@ -4,6 +4,17 @@ import Video from '../models/Video';
 import { youtubeConfig, youtubeEndpoints, isYouTubeApiConfigured, incrementQuotaUsage, hasEnoughQuota } from '../config/youtube';
 import { getEnabledSearchTerms, YouTubeSearchConfig } from '../config/youtubeSearchTerms';
 
+const YOUTUBE_SCRAPER_LOGS_ENABLED = (process.env.YOUTUBE_SCRAPER_LOGS_ENABLED || 'false').toLowerCase() === 'true';
+const ytInfo = (message: string, meta?: any) => {
+  if (YOUTUBE_SCRAPER_LOGS_ENABLED) logger.info(message, meta);
+};
+const ytWarn = (message: string, meta?: any) => {
+  if (YOUTUBE_SCRAPER_LOGS_ENABLED) logger.warn(message, meta);
+};
+const ytError = (message: string, meta?: any) => {
+  if (YOUTUBE_SCRAPER_LOGS_ENABLED) logger.error(message, meta);
+};
+
 interface YouTubeSearchResponse {
   kind: string;
   etag: string;
@@ -107,12 +118,12 @@ export class YouTubeApiService {
     try {
       // Check if YouTube API is configured
       if (!isYouTubeApiConfigured()) {
-        logger.error('YouTube API key is not configured. Please set YOUTUBE_API_KEY environment variable.');
+        ytError('YouTube API key is not configured. Please set YOUTUBE_API_KEY environment variable.');
         return 0;
       }
 
       const searchTerms = searchTermLimit ? getEnabledSearchTerms().slice(0, searchTermLimit) : getEnabledSearchTerms();
-      logger.info(`Starting YouTube video scraping for ${searchTerms.length} search terms${searchTermLimit ? ` (limited to ${searchTermLimit})` : ''}...`);
+      ytInfo(`Starting YouTube video scraping for ${searchTerms.length} search terms${searchTermLimit ? ` (limited to ${searchTermLimit})` : ''}...`);
       
       let totalProcessedCount = 0;
       
@@ -121,14 +132,14 @@ export class YouTubeApiService {
         try {
           // Check quota before processing
           if (!hasEnoughQuota(200)) { // Estimate 200 quota units per search term
-            logger.warn(`YouTube API quota limit reached. Processed ${totalProcessedCount} videos so far.`);
+            ytWarn(`YouTube API quota limit reached. Processed ${totalProcessedCount} videos so far.`);
             break;
           }
 
           const searchTermProcessedCount = await this.scrapeYouTubeForSearchTerm(searchConfig, maxPages);
           totalProcessedCount += searchTermProcessedCount;
           
-          logger.info(`Search term "${searchConfig.searchTerm}": Processed ${searchTermProcessedCount} videos`);
+          ytInfo(`Search term "${searchConfig.searchTerm}": Processed ${searchTermProcessedCount} videos`);
           
           // Add delay between search terms to be respectful to the API
           if (searchTerms.indexOf(searchConfig) < searchTerms.length - 1) {
@@ -136,16 +147,16 @@ export class YouTubeApiService {
           }
           
         } catch (error) {
-          logger.error(`Error scraping YouTube for search term "${searchConfig.searchTerm}":`, error);
+          ytError(`Error scraping YouTube for search term "${searchConfig.searchTerm}":`, error);
           // Continue with next search term
         }
       }
       
-      logger.info(`Successfully processed ${totalProcessedCount} YouTube videos from ${searchTerms.length} search terms`);
+      ytInfo(`Successfully processed ${totalProcessedCount} YouTube videos from ${searchTerms.length} search terms`);
       return totalProcessedCount;
       
     } catch (error) {
-      logger.error('Error in YouTube video scraping:', error);
+      ytError('Error in YouTube video scraping:', error);
       return 0;
     }
   }
@@ -153,7 +164,7 @@ export class YouTubeApiService {
   private static async scrapeYouTubeForSearchTerm(searchConfig: YouTubeSearchConfig, globalMaxPages?: number): Promise<number> {
     try {
       const maxPages = globalMaxPages || searchConfig.maxPages || 1;
-      logger.info(`Scraping YouTube for search term "${searchConfig.searchTerm}" (${searchConfig.description}) - up to ${maxPages} pages`);
+      ytInfo(`Scraping YouTube for search term "${searchConfig.searchTerm}" (${searchConfig.description}) - up to ${maxPages} pages`);
       
       let totalProcessedCount = 0;
       let nextPageToken: string | undefined;
@@ -163,7 +174,7 @@ export class YouTubeApiService {
         try {
           // Check quota before each page
           if (!hasEnoughQuota(100)) {
-            logger.warn(`YouTube API quota limit reached for search term "${searchConfig.searchTerm}".`);
+            ytWarn(`YouTube API quota limit reached for search term "${searchConfig.searchTerm}".`);
             break;
           }
 
@@ -181,17 +192,17 @@ export class YouTubeApiService {
                 pageProcessedCount++;
               }
             } catch (error) {
-              logger.error(`Error processing YouTube video ${video.id.videoId}:`, error);
+              ytError(`Error processing YouTube video ${video.id.videoId}:`, error);
               // Continue with next video
             }
           }
           
           totalProcessedCount += pageProcessedCount;
-          logger.info(`Search "${searchConfig.searchTerm}" - Page ${page + 1}: Processed ${pageProcessedCount} videos`);
+          ytInfo(`Search "${searchConfig.searchTerm}" - Page ${page + 1}: Processed ${pageProcessedCount} videos`);
           
           // If no next page token, we've reached the end
           if (!nextPageToken) {
-            logger.info(`No more pages available for search term "${searchConfig.searchTerm}"`);
+            ytInfo(`No more pages available for search term "${searchConfig.searchTerm}"`);
             break;
           }
           
@@ -201,7 +212,7 @@ export class YouTubeApiService {
           }
           
         } catch (error) {
-          logger.error(`Error scraping YouTube page ${page + 1} for search term "${searchConfig.searchTerm}":`, error);
+          ytError(`Error scraping YouTube page ${page + 1} for search term "${searchConfig.searchTerm}":`, error);
           // Continue with next page
         }
       }
@@ -209,7 +220,7 @@ export class YouTubeApiService {
       return totalProcessedCount;
       
     } catch (error) {
-      logger.error(`Error scraping YouTube for search term "${searchConfig.searchTerm}":`, error);
+      ytError(`Error scraping YouTube for search term "${searchConfig.searchTerm}":`, error);
       return 0;
     }
   }
@@ -238,9 +249,9 @@ export class YouTubeApiService {
       
     } catch (error: any) {
       if (error.response?.status === 403) {
-        logger.error('YouTube API quota exceeded or API key invalid');
+        ytError('YouTube API quota exceeded or API key invalid');
       } else {
-        logger.error(`Error searching YouTube videos for "${searchTerm}":`, error);
+        ytError(`Error searching YouTube videos for "${searchTerm}":`, error);
       }
       return null;
     }
@@ -279,7 +290,7 @@ export class YouTubeApiService {
       });
 
       if (existingVideo) {
-        logger.debug(`YouTube video already exists: ${video.snippet.title}`);
+      ytInfo(`YouTube video already exists: ${video.snippet.title}`);
         return false;
       }
 
@@ -292,7 +303,7 @@ export class YouTubeApiService {
 
       // Check if content is AI-related
       if (!this.isAIContent(video.snippet.title, video.snippet.description)) {
-        logger.debug(`Skipping non-AI YouTube video: ${video.snippet.title}`);
+        ytInfo(`Skipping non-AI YouTube video: ${video.snippet.title}`);
         return false;
       }
 
@@ -349,11 +360,11 @@ export class YouTubeApiService {
         blacklisted: false
       });
 
-      logger.info(`Successfully saved YouTube video from search "${searchTerm}": ${video.snippet.title}`);
+      ytInfo(`Successfully saved YouTube video from search "${searchTerm}": ${video.snippet.title}`);
       return true;
 
     } catch (error) {
-      logger.error(`Error processing YouTube video ${video.id.videoId}:`, error);
+      ytError(`Error processing YouTube video ${video.id.videoId}:`, error);
       return false;
     }
   }
@@ -519,7 +530,7 @@ export class YouTubeApiService {
       return { success: true, video: newVideo.toJSON() };
 
     } catch (error) {
-      logger.error('Error processing single YouTube video:', error);
+      ytError('Error processing single YouTube video:', error);
       return { 
         success: false, 
         error: error instanceof Error ? error.message : 'Unknown error occurred' 

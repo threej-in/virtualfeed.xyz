@@ -806,10 +806,15 @@ export class RedditScraper {
                 }
 
                 const post: any = await this.fetchSubmissionByIdJson(submissionId);
+                if (!post) {
+                    // On servers where Reddit blocks fetches, a null post should not corrupt existing rows.
+                    logger.warn(`Skipping media refresh for redditId=${video.redditId} because source post could not be fetched`);
+                    continue;
+                }
 
                 const redditVideo = this.getPostRedditVideo(post);
-                if (!post || !redditVideo) {
-                    await video.update({ blacklisted: true });
+                if (!redditVideo) {
+                    logger.warn(`Skipping media refresh for redditId=${video.redditId} because no reddit_video payload was found`);
                     continue;
                 }
 
@@ -863,7 +868,7 @@ export class RedditScraper {
                 await this.delay(400);
             } catch (error: any) {
                 const statusCode = Number(error?.statusCode || error?.response?.status || 0);
-                if (statusCode === 400 || statusCode === 403 || statusCode === 404) {
+                if (statusCode === 400 || statusCode === 404) {
                     await video.update({ blacklisted: true });
                     continue;
                 }

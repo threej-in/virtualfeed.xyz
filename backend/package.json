@@ -14,6 +14,8 @@
     "scrape:reddit:remote-ingest": "ts-node --prefer-ts-exts src/scripts/remoteIngestReddit.ts",
     "lang:reindex": "ts-node --prefer-ts-exts src/scripts/reindexVideoLanguages.ts",
     "reddit:media:refresh": "ts-node --prefer-ts-exts src/scripts/refreshRedditMediaSources.ts",
+    "reddit:repair": "ts-node --prefer-ts-exts src/scripts/repairRedditRows.ts",
+    "reddit:repair:dry": "ts-node --prefer-ts-exts src/scripts/repairRedditRows.ts --dry-run",
     "reddit:thumbnails:cleanup": "ts-node --prefer-ts-exts src/scripts/cleanupRedditThumbnails.ts",
     "reddit:thumbnails:cleanup:dry": "ts-node --prefer-ts-exts src/scripts/cleanupRedditThumbnails.ts --dry-run",
     "scrape:youtube": "ts-node --prefer-ts-exts scripts/scrape-youtube.ts",

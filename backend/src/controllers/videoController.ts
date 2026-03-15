@@ -249,6 +249,27 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
             return currentVideos;
         };
 
+        const debugSql = (
+            label: string,
+            sql: string,
+            replacements: any[]
+        ) => {
+            logger.info(`[videos-debug] ${label}`, {
+                sql: sql.replace(/\s+/g, ' ').trim(),
+                replacements,
+                request: {
+                    page: pageNum,
+                    limit: limitNum,
+                    platform: selectedPlatform || '',
+                    search: effectiveSearch || '',
+                    subreddit: typeof subreddit === 'string' ? subreddit : '',
+                    showNsfw: effectiveShowNsfw,
+                    nsfwOnly: forceNsfwOnly,
+                    language: normalizedSelectedLanguage || 'all'
+                }
+            });
+        };
+
         const fetchSimpleHomepageFallback = async (): Promise<{ videos: any[]; total: number }> => {
             const db = require('../config/database').default;
             const whereConditions: string[] = [];
@@ -283,6 +304,7 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
                 : '';
 
             const countQuery = `SELECT COUNT(*) as count FROM videos ${whereClause}`;
+            debugSql('simple-homepage-fallback-count', countQuery, queryParams);
             const [countResult] = await db.query(countQuery, { replacements: queryParams });
             const total = Number(countResult?.[0]?.count || 0);
 
@@ -300,6 +322,7 @@ export const getVideos = async (req: Request, res: Response): Promise<void> => {
                 ORDER BY ${finalSortBy} ${finalOrder}, id DESC
                 LIMIT ${limitNum} OFFSET ${offset}
             `;
+            debugSql('simple-homepage-fallback-videos', videosQuery, queryParams);
             const [videos] = await db.query(videosQuery, { replacements: queryParams });
             return { videos: videos || [], total };
         };

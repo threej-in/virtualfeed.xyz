@@ -14,6 +14,13 @@ export const TRENDING_PERIODS: TrendingPeriod[] = [
 ];
 
 export class TrendingService {
+  private static logQuery(label: string, sql: string, replacements: any[]): void {
+    logger.info(`[trending-debug] ${label}`, {
+      sql: sql.replace(/\s+/g, ' ').trim(),
+      replacements
+    });
+  }
+
   private static getHomepageStage(pageIndex: number): {
     label: string;
     windows: Array<{ days: number | null; weight: number }>;
@@ -447,6 +454,7 @@ export class TrendingService {
 
       // Get total count for pagination
       const countQuery = `SELECT COUNT(*) as count FROM videos ${baseWhereClause}`;
+      this.logQuery('homepage-count', countQuery, baseQueryParams);
       const [countResult] = await db.query(countQuery, { replacements: baseQueryParams });
       const total = countResult[0].count;
 
@@ -498,6 +506,7 @@ export class TrendingService {
           LIMIT ${bucketLimit} OFFSET ${bucketOffset}
         `;
 
+        this.logQuery(`homepage-bucket-${stage.label}-${bucket.days ?? 'all'}`, bucketQuery, bucketQueryParams);
         const [bucketVideos] = await db.query(bucketQuery, { replacements: bucketQueryParams });
         for (const video of bucketVideos as any[]) {
           if (selectedIds.has(video.id)) continue;
@@ -542,6 +551,7 @@ export class TrendingService {
           LIMIT ${remaining} OFFSET ${pageIndex * remaining}
         `;
 
+        this.logQuery(`homepage-backfill-${stage.label}`, backfillQuery, backfillQueryParams);
         const [backfillVideos] = await db.query(backfillQuery, { replacements: backfillQueryParams });
         for (const video of backfillVideos as any[]) {
           if (selectedIds.has(video.id)) continue;

@@ -291,20 +291,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
 
         const mp4FallbackUrl = getMp4FallbackUrl();
 
-        // redditpx-style priority: DASH first (audio track handled by manifest),
-        // then HLS, then MP4 fallback.
-        if (sourceDash) {
-            return { url: sourceDash, type: 'dash', isReddit: true, requiresExternalAudio: false, mp4FallbackUrl };
-        }
-        if (sourceHls) {
-            return { url: sourceHls, type: 'hls', isReddit: true, requiresExternalAudio: false, mp4FallbackUrl };
-        }
-        if (sourceFallback && isDashUrl(sourceFallback)) {
-            return { url: sourceFallback, type: 'dash', isReddit: true, requiresExternalAudio: false, mp4FallbackUrl };
-        }
-        if (sourceFallback && isHlsUrl(sourceFallback)) {
-            return { url: sourceFallback, type: 'hls', isReddit: true, requiresExternalAudio: false, mp4FallbackUrl };
-        }
+        // Keep popup Reddit playback aligned with hover previews:
+        // prefer a concrete MP4/CMAF URL first because it is the path that is
+        // already known to work in the grid. Adaptive manifests remain fallback.
         if (mp4FallbackUrl && isCmafUrl(mp4FallbackUrl)) {
             return {
                 url: mp4FallbackUrl,
@@ -341,6 +330,18 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                 requiresExternalAudio: hasExternalAudioCandidate,
                 mp4FallbackUrl
             };
+        }
+        if (sourceDash) {
+            return { url: sourceDash, type: 'dash', isReddit: true, requiresExternalAudio: false, mp4FallbackUrl };
+        }
+        if (sourceHls) {
+            return { url: sourceHls, type: 'hls', isReddit: true, requiresExternalAudio: false, mp4FallbackUrl };
+        }
+        if (sourceFallback && isDashUrl(sourceFallback)) {
+            return { url: sourceFallback, type: 'dash', isReddit: true, requiresExternalAudio: false, mp4FallbackUrl };
+        }
+        if (sourceFallback && isHlsUrl(sourceFallback)) {
+            return { url: sourceFallback, type: 'hls', isReddit: true, requiresExternalAudio: false, mp4FallbackUrl };
         }
 
         const seed = sourceDash || sourceHls || sourceFallback || cleanedVideoUrl;

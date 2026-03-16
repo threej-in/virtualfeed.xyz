@@ -248,10 +248,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         const hasExplicitAudio =
             metadata?.hasAudio === true ||
             metadata?.redditVideoSources?.hasAudio === true;
-        const hasExternalAudioCandidate =
-            hasExplicitAudio &&
-            typeof metadata?.audioUrl === 'string' &&
-            metadata.audioUrl.trim().length > 0;
+        const hasExternalAudioCandidate = false;
         const sourceFallback = typeof metadata?.redditVideoSources?.fallbackUrl === 'string'
             ? cleanup(metadata.redditVideoSources.fallbackUrl)
             : '';
@@ -309,9 +306,12 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
             return mp4FallbackUrl;
         })();
 
-        // Keep popup Reddit playback aligned with hover previews:
-        // prefer a concrete MP4/CMAF URL first because it is the path that is
-        // already known to work in the grid. Adaptive manifests remain fallback.
+        // Match redditpx behavior:
+        // use dash.js only when Reddit provides a DASH manifest for an audio-bearing
+        // post; otherwise use a concrete MP4 fallback.
+        if (hasExplicitAudio && sourceDash) {
+            return { url: sourceDash, type: 'dash', isReddit: true, requiresExternalAudio: false, mp4FallbackUrl };
+        }
         if (hoverCompatibleMp4Url && isCmafUrl(hoverCompatibleMp4Url)) {
             return {
                 url: hoverCompatibleMp4Url,
@@ -338,9 +338,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                 requiresExternalAudio: hasExternalAudioCandidate,
                 mp4FallbackUrl
             };
-        }
-        if (sourceDash) {
-            return { url: sourceDash, type: 'dash', isReddit: true, requiresExternalAudio: false, mp4FallbackUrl };
         }
         if (sourceHls) {
             return { url: sourceHls, type: 'hls', isReddit: true, requiresExternalAudio: false, mp4FallbackUrl };
@@ -476,6 +473,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
             const dashPlayer = dashFactory().create();
             dashPlayerRef.current = dashPlayer;
             dashPlayer.initialize(videoElement, activePlaybackSource.url, true);
+            if (typeof dashPlayer.setMute === 'function') {
+                dashPlayer.setMute(isMutedRef.current);
+            }
 
             const failoverTimer = window.setTimeout(() => {
                 const stuck =
@@ -487,7 +487,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
                 }
             }, 7000);
 
-            const dashEvents = (dashFactory as any)?.events;
+            const dashEvents = (dashjs as any)?.MediaPlayer?.events || (dashFactory as any)?.events;
             if (dashEvents?.ERROR) {
                 dashPlayer.on(dashEvents.ERROR, (event: any) => {
                     console.error('DASH playback error:', event);
@@ -496,6 +496,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
             }
             if (dashEvents?.STREAM_INITIALIZED) {
                 dashPlayer.on(dashEvents.STREAM_INITIALIZED, () => {
+                    if (typeof dashPlayer.setMute === 'function') {
+                        dashPlayer.setMute(isMutedRef.current);
+                    }
                     setIsBuffering(false);
                     attemptPlay();
                 });
@@ -732,9 +735,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
         const hasExplicitAudio =
             metadata?.hasAudio === true ||
             metadata?.redditVideoSources?.hasAudio === true;
-        let rawAudioUrl = hasExplicitAudio ? metadata?.audioUrl : '';
+        let rawAudioUrl = '';
 
-        if ((!rawAudioUrl || typeof rawAudioUrl !== 'string') && isRedditVideo && hasExplicitAudio) {
+        if ((!rawAudioUrl || typeof rawAudioUrl !== 'string') && isRedditVideo && hasExplicitAudio && activePlaybackSource.type === 'mp4') {
             const audioSeedUrl = [currentVideo.videoUrl, activePlaybackSource.url]
                 .find((candidate) => typeof candidate === 'string' && candidate.includes('v.redd.it')) || '';
             const match = audioSeedUrl.match(/v\.redd\.it\/([^/?]+)/i);
@@ -852,6 +855,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ videos, initialVideoIndex, op
 
         if (videoElement) {
             videoElement.muted = isMuted || hasAudioTrack;
+        }
+
+        if (dashPlayerRef.current && typeof (dashPlayerRef.current as any).setMute === 'function') {
+            (dashPlayerRef.current as any).setMute(isMuted || hasAudioTrack);
         }
 
         if (!audioElement) {
